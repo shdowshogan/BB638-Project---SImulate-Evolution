@@ -209,6 +209,7 @@ class SimulatorGUI:
         # Control Panel with larger fonts and better spacing
         control_frame = ttk.Frame(self.root, padding="20")
         control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        control_frame.columnconfigure(1, weight=1)
         
         # Configure style for larger fonts
         style = ttk.Style()
