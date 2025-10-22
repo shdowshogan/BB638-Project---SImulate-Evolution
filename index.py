@@ -65,11 +65,38 @@ class EvolutionSimulator:
         self.mutation_std = 0.5
         self.migration_rate = 0.0
         self.genetic_drift_strength = 0.0
+        # Population dynamics parameters
+        self.carrying_capacity = 1000  # Max population
+        self.base_growth_rate = 0.8  # Max growth if avg_fitness is 1
+        self.death_rate = 0.2        # Baseline % of population that dies
         
     def simulate_generation(self):
         """Simulate one generation of evolution"""
         # Calculate fitness
         self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
+        # --- Population Growth/Shrink Logic ---
+        current_size = len(self.population.organisms)
+
+        # Calculate average fitness
+        fitnesses = [org.fitness for org in self.population.organisms]
+        mean_fitness = np.mean(fitnesses) if fitnesses else 0
+
+        # Calculate births based on fitness and growth rate
+        births = int(current_size * self.base_growth_rate * mean_fitness)
+
+        # Calculate deaths
+        deaths = int(current_size * self.death_rate)
+
+        # Get new size
+        new_size = current_size + births - deaths
+
+        # Enforce carrying capacity and minimum population
+        new_size = min(new_size, self.carrying_capacity)
+        new_size = max(10, new_size) # Prevent extinction (min 10 orgs)
+
+        # ***IMPORTANT: Update the population's target size***
+        self.population.size = new_size
+        # --- End of new logic ---
         
         # Natural Selection: Reproduce based on fitness
         new_organisms = self.selection()
