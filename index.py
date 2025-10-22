@@ -86,6 +86,8 @@ class EvolutionSimulator:
             new_organisms = self.apply_gene_flow(new_organisms)
         
         self.population.organisms = new_organisms
+        # Recompute fitness for the new population after reproduction/mutation/drift/migration
+        self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
         self.generation += 1
         
         # Record statistics
