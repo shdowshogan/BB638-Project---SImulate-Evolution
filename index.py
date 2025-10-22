@@ -193,6 +193,7 @@ class SimulatorGUI:
         self.simulator = EvolutionSimulator()
         self.running = False
         self.tick_ms = 100  # Simulation speed (milliseconds per step)
+        self.bottom_right_mode = tk.StringVar(value="Population Size")
         
         self.setup_ui()
         
@@ -314,9 +315,18 @@ class SimulatorGUI:
         self.speed_entry.grid(row=7, column=2, padx=5, pady=row_padding)
         self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
         
+        # Bottom-right view selector
+        ttk.Label(control_frame, text="Bottom-right view:", font=('Arial', 12, 'bold')).grid(
+            row=8, column=0, sticky=tk.W, pady=row_padding)
+        self.view_selector = ttk.Combobox(control_frame, width=18, state='readonly',
+                                          values=["Population Size", "Trait Space 2D", "Trait Space 3D"],
+                                          textvariable=self.bottom_right_mode)
+        self.view_selector.grid(row=8, column=1, sticky=tk.W, padx=10, pady=row_padding)
+        self.view_selector.bind('<<ComboboxSelected>>', lambda e: self.update_plots())
+
         # Buttons
         button_frame = ttk.Frame(control_frame)
-        button_frame.grid(row=8, column=0, columnspan=3, pady=20)
+        button_frame.grid(row=9, column=0, columnspan=3, pady=20)
         
         self.start_button = ttk.Button(button_frame, text="Start Simulation", 
                                        command=self.toggle_simulation)
@@ -326,7 +336,7 @@ class SimulatorGUI:
         ttk.Button(button_frame, text="Reset", command=self.reset).pack(side=tk.LEFT, padx=10)
         
         self.gen_label = ttk.Label(control_frame, text="Generation: 0", font=('Arial', 14, 'bold'))
-        self.gen_label.grid(row=9, column=0, columnspan=3, pady=15)
+        self.gen_label.grid(row=10, column=0, columnspan=3, pady=15)
         
         # Plots on the right
         self.figure, self.axes = plt.subplots(2, 3, figsize=(14, 8))
@@ -532,13 +542,50 @@ class SimulatorGUI:
             self.axes[1, 1].set_title('Current Fitness Distribution')
             self.axes[1, 1].grid(True, alpha=0.3)
             
-            # Plot 6: Population size over time
-            self.axes[1, 2].plot(history['generations'], history['population_size'],
-                                'g-', linewidth=2)
-            self.axes[1, 2].set_xlabel('Generation')
-            self.axes[1, 2].set_ylabel('Population Size')
-            self.axes[1, 2].set_title('Population Size (Gene Flow Effect)')
-            self.axes[1, 2].grid(True, alpha=0.3)
+            # Plot 6: Bottom-right view toggle
+            mode = self.bottom_right_mode.get() if hasattr(self, 'bottom_right_mode') else 'Population Size'
+            # Ensure correct axis type for the selected mode
+            def ensure_axis(is3d: bool):
+                ax = self.axes[1, 2]
+                ax_is_3d = getattr(ax, 'name', '') == '3d'
+                if is3d and not ax_is_3d:
+                    # replace with 3D axis
+                    self.figure.delaxes(ax)
+                    self.axes[1, 2] = self.figure.add_subplot(2, 3, 6, projection='3d')
+                elif not is3d and ax_is_3d:
+                    # replace with 2D axis
+                    self.figure.delaxes(ax)
+                    self.axes[1, 2] = self.figure.add_subplot(2, 3, 6)
+
+            if mode == 'Population Size':
+                ensure_axis(False)
+                self.axes[1, 2].plot(history['generations'], history['population_size'],
+                                     'g-', linewidth=2)
+                self.axes[1, 2].set_xlabel('Generation')
+                self.axes[1, 2].set_ylabel('Population Size')
+                self.axes[1, 2].set_title('Population Size (Gene Flow Effect)')
+                self.axes[1, 2].grid(True, alpha=0.3)
+            elif mode == 'Trait Space 2D':
+                ensure_axis(False)
+                trait_matrix = np.array([org.traits for org in self.simulator.population.organisms])
+                fitnesses = [org.fitness for org in self.simulator.population.organisms]
+                self.axes[1, 2].scatter(trait_matrix[:, 0], trait_matrix[:, 1],
+                                        c=fitnesses, cmap='viridis', s=30, edgecolor='none')
+                self.axes[1, 2].set_xlabel('Trait 1')
+                self.axes[1, 2].set_ylabel('Trait 2')
+                self.axes[1, 2].set_title('Trait Space (colored by fitness)')
+                self.axes[1, 2].grid(True, alpha=0.2)
+            elif mode == 'Trait Space 3D':
+                ensure_axis(True)
+                trait_matrix = np.array([org.traits for org in self.simulator.population.organisms])
+                fitnesses = [org.fitness for org in self.simulator.population.organisms]
+                ax3d = self.axes[1, 2]
+                ax3d.scatter(trait_matrix[:, 0], trait_matrix[:, 1], trait_matrix[:, 2],
+                             c=fitnesses, cmap='viridis', s=15, depthshade=True)
+                ax3d.set_xlabel('Trait 1')
+                ax3d.set_ylabel('Trait 2')
+                ax3d.set_zlabel('Trait 3')
+                ax3d.set_title('3D Trait Space (colored by fitness)')
         
         self.figure.tight_layout()
         self.canvas.draw()
