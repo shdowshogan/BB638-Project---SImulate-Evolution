@@ -213,14 +213,16 @@ class SimulatorGUI:
         
         # Configure style for larger fonts
         style = ttk.Style()
-        style.configure('TLabel', font=('Arial', 11))
-        style.configure('TButton', font=('Arial', 11), padding=10)
-        
+        style.configure('TLabel', font=('Arial', 20))
+        style.configure('TButton', font=('Arial', 20), padding=10)
+        style.configure('TEntry', font=('Arial', 20))
+        style.configure('TCombobox', font=('Arial', 20))
+
         row_padding = 8
         
         # Parameters with sliders AND entry boxes
         # Selection Strength
-        ttk.Label(control_frame, text="Selection Strength:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Selection Strength:").grid(
             row=0, column=0, sticky=tk.W, pady=row_padding)
         self.selection_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL, 
                                          command=self.update_selection, length=500)
@@ -232,7 +234,7 @@ class SimulatorGUI:
         self.selection_entry.bind('<Return>', lambda e: self.update_from_entry('selection'))
         
         # Mutation Rate
-        ttk.Label(control_frame, text="Mutation Rate:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Mutation Rate:").grid(
             row=1, column=0, sticky=tk.W, pady=row_padding)
         self.mutation_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL,
                                         command=self.update_mutation, length=300)
@@ -244,7 +246,7 @@ class SimulatorGUI:
         self.mutation_entry.bind('<Return>', lambda e: self.update_from_entry('mutation'))
         
         # Genetic Drift
-        ttk.Label(control_frame, text="Genetic Drift:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Genetic Drift:").grid(
             row=2, column=0, sticky=tk.W, pady=row_padding)
         self.drift_scale = ttk.Scale(control_frame, from_=0, to=0.5, orient=tk.HORIZONTAL,
                                      command=self.update_drift, length=300)
@@ -256,7 +258,7 @@ class SimulatorGUI:
         self.drift_entry.bind('<Return>', lambda e: self.update_from_entry('drift'))
         
         # Migration Rate
-        ttk.Label(control_frame, text="Migration Rate:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Migration Rate:").grid(
             row=3, column=0, sticky=tk.W, pady=row_padding)
         self.migration_scale = ttk.Scale(control_frame, from_=0, to=0.3, orient=tk.HORIZONTAL,
                                          command=self.update_migration, length=300)
@@ -268,7 +270,7 @@ class SimulatorGUI:
         self.migration_entry.bind('<Return>', lambda e: self.update_from_entry('migration'))
         
         # Optimal trait controls
-        ttk.Label(control_frame, text="Optimal Trait 1:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Optimal Trait 1:").grid(
             row=4, column=0, sticky=tk.W, pady=row_padding)
         self.trait1_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
                                       command=self.update_trait1, length=300)
@@ -280,7 +282,7 @@ class SimulatorGUI:
         self.trait1_entry.bind('<Return>', lambda e: self.update_from_entry('trait1'))
         
         # Optimal Trait 2
-        ttk.Label(control_frame, text="Optimal Trait 2:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Optimal Trait 2:").grid(
             row=5, column=0, sticky=tk.W, pady=row_padding)
         self.trait2_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
                                       command=self.update_trait2, length=300)
@@ -293,7 +295,7 @@ class SimulatorGUI:
         self.trait2_entry.bind('<Return>', lambda e: self.update_from_entry('trait2'))
         
         # Optimal Trait 3
-        ttk.Label(control_frame, text="Optimal Trait 3:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Optimal Trait 3:").grid(
             row=6, column=0, sticky=tk.W, pady=row_padding)
         self.trait3_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
                                       command=self.update_trait3, length=300)
@@ -306,7 +308,7 @@ class SimulatorGUI:
         self.trait3_entry.bind('<Return>', lambda e: self.update_from_entry('trait3'))
         
         # Simulation speed control
-        ttk.Label(control_frame, text="Speed (ms/step):", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Speed (ms/step):").grid(
             row=7, column=0, sticky=tk.W, pady=row_padding)
         self.speed_scale = ttk.Scale(control_frame, from_=10, to=2000, orient=tk.HORIZONTAL,
                                      command=self.update_speed, length=300)
@@ -318,7 +320,7 @@ class SimulatorGUI:
         self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
         
         # Bottom-right view selector
-        ttk.Label(control_frame, text="Bottom-right view:", font=('Arial', 12, 'bold')).grid(
+        ttk.Label(control_frame, text="Bottom-right view:").grid(
             row=8, column=0, sticky=tk.W, pady=row_padding)
         self.view_selector = ttk.Combobox(control_frame, width=18, state='readonly',
                                           values=["Population Size", "Trait Space 2D", "Trait Space 3D"],
@@ -337,7 +339,7 @@ class SimulatorGUI:
         ttk.Button(button_frame, text="Step", command=self.step).pack(side=tk.LEFT, padx=10)
         ttk.Button(button_frame, text="Reset", command=self.reset).pack(side=tk.LEFT, padx=10)
         
-        self.gen_label = ttk.Label(control_frame, text="Generation: 0", font=('Arial', 14, 'bold'))
+        self.gen_label = ttk.Label(control_frame, text="Generation: 0", font=('Arial', 20, 'bold'))
         self.gen_label.grid(row=10, column=0, columnspan=3, pady=15)
         
         # --- MODIFIED: Plots now go in a frame below the controls ---
