@@ -1,0 +1,55 @@
+/* style.css */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background-color: #1a1a1a;
+  color: #fafafa;
+}
+
+h1 {
+  margin-top: 20px;
+}
+
+canvas {
+  display: block;
+  margin: 20px auto;
+  border: 2px solid white;
+}
+
+/* NEW: Styles for the UI elements */
+#controls-container {
+  width: 700px;
+  margin: 0 auto; /* Center it */
+  padding: 10px;
+  background-color: #333;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.control-item {
+  margin: 10px;
+}
+
+.control-item p {
+  margin: 0 0 5px 0;
+}
+
+input[type="range"] {
+  width: 200px;
+}
+
+button {
+  padding: 8px 12px;
+  font-size: 16px;
+  background-color: #4CAF50; /* Green */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #45a049;
+}
