@@ -5,6 +5,7 @@ from tkinter import ttk
 from dataclasses import dataclass
 from typing import List, Tuple
 import seaborn as sns
+
 import matplotlib.pyplot as plt
 
 sns.set_style("whitegrid")
@@ -189,6 +190,7 @@ class SimulatorGUI:
         
         self.simulator = EvolutionSimulator()
         self.running = False
+        self.tick_ms = 100  # Simulation speed (milliseconds per step)
         
         self.setup_ui()
         
@@ -216,7 +218,7 @@ class SimulatorGUI:
         ttk.Label(control_frame, text="Selection Strength:", font=('Arial', 12, 'bold')).grid(
             row=0, column=0, sticky=tk.W, pady=row_padding)
         self.selection_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL, 
-                                         command=self.update_selection, length=300)
+                                         command=self.update_selection, length=500)
         self.selection_scale.set(0.3)
         self.selection_scale.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
         self.selection_entry = ttk.Entry(control_frame, width=8, font=('Arial', 11))
@@ -272,9 +274,47 @@ class SimulatorGUI:
         self.trait1_entry.grid(row=4, column=2, padx=5, pady=row_padding)
         self.trait1_entry.bind('<Return>', lambda e: self.update_from_entry('trait1'))
         
+        # Optimal Trait 2
+        ttk.Label(control_frame, text="Optimal Trait 2:", font=('Arial', 12, 'bold')).grid(
+            row=5, column=0, sticky=tk.W, pady=row_padding)
+        self.trait2_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+                                      command=self.update_trait2, length=300)
+        init_trait2 = float(self.simulator.optimal_traits[1]) if len(self.simulator.optimal_traits) > 1 else 5.0
+        self.trait2_scale.set(init_trait2)
+        self.trait2_scale.grid(row=5, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
+        self.trait2_entry = ttk.Entry(control_frame, width=8, font=('Arial', 11))
+        self.trait2_entry.insert(0, f"{init_trait2:.1f}")
+        self.trait2_entry.grid(row=5, column=2, padx=5, pady=row_padding)
+        self.trait2_entry.bind('<Return>', lambda e: self.update_from_entry('trait2'))
+        
+        # Optimal Trait 3
+        ttk.Label(control_frame, text="Optimal Trait 3:", font=('Arial', 12, 'bold')).grid(
+            row=6, column=0, sticky=tk.W, pady=row_padding)
+        self.trait3_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+                                      command=self.update_trait3, length=300)
+        init_trait3 = float(self.simulator.optimal_traits[2]) if len(self.simulator.optimal_traits) > 2 else 8.0
+        self.trait3_scale.set(init_trait3)
+        self.trait3_scale.grid(row=6, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
+        self.trait3_entry = ttk.Entry(control_frame, width=8, font=('Arial', 11))
+        self.trait3_entry.insert(0, f"{init_trait3:.1f}")
+        self.trait3_entry.grid(row=6, column=2, padx=5, pady=row_padding)
+        self.trait3_entry.bind('<Return>', lambda e: self.update_from_entry('trait3'))
+        
+        # Simulation speed control
+        ttk.Label(control_frame, text="Speed (ms/step):", font=('Arial', 12, 'bold')).grid(
+            row=7, column=0, sticky=tk.W, pady=row_padding)
+        self.speed_scale = ttk.Scale(control_frame, from_=10, to=2000, orient=tk.HORIZONTAL,
+                                     command=self.update_speed, length=300)
+        self.speed_scale.set(self.tick_ms)
+        self.speed_scale.grid(row=7, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
+        self.speed_entry = ttk.Entry(control_frame, width=8, font=('Arial', 11))
+        self.speed_entry.insert(0, f"{self.tick_ms}")
+        self.speed_entry.grid(row=7, column=2, padx=5, pady=row_padding)
+        self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
+        
         # Buttons
         button_frame = ttk.Frame(control_frame)
-        button_frame.grid(row=5, column=0, columnspan=3, pady=20)
+        button_frame.grid(row=8, column=0, columnspan=3, pady=20)
         
         self.start_button = ttk.Button(button_frame, text="Start Simulation", 
                                        command=self.toggle_simulation)
@@ -284,45 +324,76 @@ class SimulatorGUI:
         ttk.Button(button_frame, text="Reset", command=self.reset).pack(side=tk.LEFT, padx=10)
         
         self.gen_label = ttk.Label(control_frame, text="Generation: 0", font=('Arial', 14, 'bold'))
-        self.gen_label.grid(row=6, column=0, columnspan=3, pady=15)
+        self.gen_label.grid(row=9, column=0, columnspan=3, pady=15)
         
-        # Plots
+        # Plots on the right
         self.figure, self.axes = plt.subplots(2, 3, figsize=(14, 8))
         self.figure.tight_layout(pad=3.0)
         
         canvas_frame = ttk.Frame(self.root)
-        canvas_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        canvas_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         self.canvas = FigureCanvasTkAgg(self.figure, master=canvas_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
+        # Layout weights: left controls fixed, right plots expandable
+        self.root.columnconfigure(0, weight=0)
+        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
         
     def update_selection(self, val):
         self.simulator.selection_strength = float(val)
-        self.selection_entry.delete(0, tk.END)
-        self.selection_entry.insert(0, f"{float(val):.2f}")
+        # Guard during initialization before entry widgets exist
+        if hasattr(self, 'selection_entry'):
+            self.selection_entry.delete(0, tk.END)
+            self.selection_entry.insert(0, f"{float(val):.2f}")
     
     def update_mutation(self, val):
         self.simulator.mutation_rate = float(val)
-        self.mutation_entry.delete(0, tk.END)
-        self.mutation_entry.insert(0, f"{float(val):.2f}")
+        if hasattr(self, 'mutation_entry'):
+            self.mutation_entry.delete(0, tk.END)
+            self.mutation_entry.insert(0, f"{float(val):.2f}")
     
     def update_drift(self, val):
         self.simulator.genetic_drift_strength = float(val)
-        self.drift_entry.delete(0, tk.END)
-        self.drift_entry.insert(0, f"{float(val):.2f}")
+        if hasattr(self, 'drift_entry'):
+            self.drift_entry.delete(0, tk.END)
+            self.drift_entry.insert(0, f"{float(val):.2f}")
     
     def update_migration(self, val):
         self.simulator.migration_rate = float(val)
-        self.migration_entry.delete(0, tk.END)
-        self.migration_entry.insert(0, f"{float(val):.2f}")
+        if hasattr(self, 'migration_entry'):
+            self.migration_entry.delete(0, tk.END)
+            self.migration_entry.insert(0, f"{float(val):.2f}")
     
     def update_trait1(self, val):
         self.simulator.optimal_traits[0] = float(val)
-        self.trait1_entry.delete(0, tk.END)
-        self.trait1_entry.insert(0, f"{float(val):.1f}")
+        if hasattr(self, 'trait1_entry'):
+            self.trait1_entry.delete(0, tk.END)
+            self.trait1_entry.insert(0, f"{float(val):.1f}")
+    
+    def update_trait2(self, val):
+        if len(self.simulator.optimal_traits) > 1:
+            self.simulator.optimal_traits[1] = float(val)
+        if hasattr(self, 'trait2_entry'):
+            self.trait2_entry.delete(0, tk.END)
+            self.trait2_entry.insert(0, f"{float(val):.1f}")
+    
+    def update_trait3(self, val):
+        if len(self.simulator.optimal_traits) > 2:
+            self.simulator.optimal_traits[2] = float(val)
+        if hasattr(self, 'trait3_entry'):
+            self.trait3_entry.delete(0, tk.END)
+            self.trait3_entry.insert(0, f"{float(val):.1f}")
+
+    def update_speed(self, val):
+        try:
+            self.tick_ms = int(float(val))
+        except ValueError:
+            return
+        if hasattr(self, 'speed_entry'):
+            self.speed_entry.delete(0, tk.END)
+            self.speed_entry.insert(0, f"{self.tick_ms}")
     
     def update_from_entry(self, param_name):
         """Update parameter from entry box"""
@@ -352,6 +423,23 @@ class SimulatorGUI:
                 val = max(0.0, min(10.0, val))
                 self.trait1_scale.set(val)
                 self.simulator.optimal_traits[0] = val
+            elif param_name == 'trait2':
+                val = float(self.trait2_entry.get())
+                val = max(0.0, min(10.0, val))
+                self.trait2_scale.set(val)
+                if len(self.simulator.optimal_traits) > 1:
+                    self.simulator.optimal_traits[1] = val
+            elif param_name == 'trait3':
+                val = float(self.trait3_entry.get())
+                val = max(0.0, min(10.0, val))
+                self.trait3_scale.set(val)
+                if len(self.simulator.optimal_traits) > 2:
+                    self.simulator.optimal_traits[2] = val
+            elif param_name == 'speed':
+                val = int(float(self.speed_entry.get()))
+                val = max(10, min(2000, val))
+                self.speed_scale.set(val)
+                self.tick_ms = val
         except ValueError:
             pass  # Invalid input, ignore
     
@@ -371,14 +459,14 @@ class SimulatorGUI:
     def run_simulation(self):
         if self.running:
             self.step()
-            self.root.after(100, self.run_simulation)
+            self.root.after(self.tick_ms, self.run_simulation)
     
     def reset(self):
         self.running = False
         self.start_button.config(text="Start Simulation")
         self.simulator.reset()
-        # Initialize the plots with the starting population
-        self.simulator.population.calculate_fitness(self.simulator.optimal_traits, 
+        # Recompute initial fitness and seed history so plots aren't empty/flat
+        self.simulator.population.calculate_fitness(self.simulator.optimal_traits,
                                                     self.simulator.selection_strength)
         self.simulator.record_statistics()
         self.update_plots()
@@ -395,9 +483,9 @@ class SimulatorGUI:
             # Plot 1: Mean Fitness over time
             self.axes[0, 0].plot(history['generations'], history['mean_fitness'], 
                                 'b-', linewidth=2)
-            self.axes[0, 0].set_xlabel('Generation', fontsize=11)
-            self.axes[0, 0].set_ylabel('Mean Fitness', fontsize=11)
-            self.axes[0, 0].set_title('Natural Selection: Fitness Evolution', fontsize=12, fontweight='bold')
+            self.axes[0, 0].set_xlabel('Generation')
+            self.axes[0, 0].set_ylabel('Mean Fitness')
+            self.axes[0, 0].set_title('Natural Selection: Fitness Evolution')
             self.axes[0, 0].grid(True, alpha=0.3)
             
             # Plot 2: Trait means over time
@@ -407,20 +495,20 @@ class SimulatorGUI:
                                     color=colors[i], label=f'Trait {i+1}', linewidth=2)
                 self.axes[0, 1].axhline(y=self.simulator.optimal_traits[i], 
                                        color=colors[i], linestyle='--', alpha=0.5)
-            self.axes[0, 1].set_xlabel('Generation', fontsize=11)
-            self.axes[0, 1].set_ylabel('Mean Trait Value', fontsize=11)
-            self.axes[0, 1].set_title('Trait Evolution (dashed = optimal)', fontsize=12, fontweight='bold')
-            self.axes[0, 1].legend(fontsize=10)
+            self.axes[0, 1].set_xlabel('Generation')
+            self.axes[0, 1].set_ylabel('Mean Trait Value')
+            self.axes[0, 1].set_title('Trait Evolution (dashed = optimal)')
+            self.axes[0, 1].legend()
             self.axes[0, 1].grid(True, alpha=0.3)
             
             # Plot 3: Trait variance (Genetic Drift indicator)
             for i in range(self.simulator.population.num_traits):
                 self.axes[0, 2].plot(history['generations'], history['trait_stds'][i],
                                     color=colors[i], label=f'Trait {i+1}', linewidth=2)
-            self.axes[0, 2].set_xlabel('Generation', fontsize=11)
-            self.axes[0, 2].set_ylabel('Trait Standard Deviation', fontsize=11)
-            self.axes[0, 2].set_title('Genetic Drift: Trait Variance', fontsize=12, fontweight='bold')
-            self.axes[0, 2].legend(fontsize=10)
+            self.axes[0, 2].set_xlabel('Generation')
+            self.axes[0, 2].set_ylabel('Trait Standard Deviation')
+            self.axes[0, 2].set_title('Genetic Drift: Trait Variance')
+            self.axes[0, 2].legend()
             self.axes[0, 2].grid(True, alpha=0.3)
             
             # Plot 4: Current trait distribution
@@ -428,26 +516,26 @@ class SimulatorGUI:
             for i in range(min(3, self.simulator.population.num_traits)):
                 self.axes[1, 0].hist(trait_matrix[:, i], bins=20, alpha=0.5, 
                                     color=colors[i], label=f'Trait {i+1}')
-            self.axes[1, 0].set_xlabel('Trait Value', fontsize=11)
-            self.axes[1, 0].set_ylabel('Frequency', fontsize=11)
-            self.axes[1, 0].set_title('Current Trait Distribution', fontsize=12, fontweight='bold')
-            self.axes[1, 0].legend(fontsize=10)
+            self.axes[1, 0].set_xlabel('Trait Value')
+            self.axes[1, 0].set_ylabel('Frequency')
+            self.axes[1, 0].set_title('Current Trait Distribution')
+            self.axes[1, 0].legend()
             self.axes[1, 0].grid(True, alpha=0.3)
             
             # Plot 5: Fitness distribution
             fitnesses = [org.fitness for org in self.simulator.population.organisms]
             self.axes[1, 1].hist(fitnesses, bins=30, color='purple', alpha=0.7, edgecolor='black')
-            self.axes[1, 1].set_xlabel('Fitness', fontsize=11)
-            self.axes[1, 1].set_ylabel('Number of Organisms', fontsize=11)
-            self.axes[1, 1].set_title('Current Fitness Distribution', fontsize=12, fontweight='bold')
+            self.axes[1, 1].set_xlabel('Fitness')
+            self.axes[1, 1].set_ylabel('Number of Organisms')
+            self.axes[1, 1].set_title('Current Fitness Distribution')
             self.axes[1, 1].grid(True, alpha=0.3)
             
             # Plot 6: Population size over time
             self.axes[1, 2].plot(history['generations'], history['population_size'],
                                 'g-', linewidth=2)
-            self.axes[1, 2].set_xlabel('Generation', fontsize=11)
-            self.axes[1, 2].set_ylabel('Population Size', fontsize=11)
-            self.axes[1, 2].set_title('Population Size (Gene Flow Effect)', fontsize=12, fontweight='bold')
+            self.axes[1, 2].set_xlabel('Generation')
+            self.axes[1, 2].set_ylabel('Population Size')
+            self.axes[1, 2].set_title('Population Size (Gene Flow Effect)')
             self.axes[1, 2].grid(True, alpha=0.3)
         
         self.figure.tight_layout()
