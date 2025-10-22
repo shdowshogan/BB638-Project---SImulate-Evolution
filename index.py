@@ -5,8 +5,8 @@ from tkinter import ttk
 from dataclasses import dataclass
 from typing import List, Tuple
 import seaborn as sns
-
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D  # Register 3D projection
 
 sns.set_style("whitegrid")
 
@@ -65,74 +65,85 @@ class EvolutionSimulator:
         self.mutation_std = 0.5
         self.migration_rate = 0.0
         self.genetic_drift_strength = 0.0
-        # Population dynamics parameters
-        self.carrying_capacity = 1000  # Max population
-        self.base_growth_rate = 0.8  # Max growth if avg_fitness is 1
-        self.death_rate = 0.2        # Baseline % of population that dies
+        
+        # Population dynamics parameters (scientifically corrected)
+        self.carrying_capacity = 1000
+        self.base_growth_rate = 1.2  # Growth rate when fitness=1 and no crowding
+        self.base_death_rate = 0.4   # Death rate when fitness=0
+        self.fitness_survival_bonus = 0.35  # Max reduction in death (fitness shields from death)
         
     def simulate_generation(self):
-        """Simulate one generation of evolution"""
-        # Calculate fitness
+        """
+        Simulate one generation with biologically realistic dynamics:
+        1. Calculate current fitness
+        2. Determine births (fitness-dependent, logistic growth)
+        3. Determine deaths (fitness reduces death rate)
+        4. Fitness-weighted selection to new size
+        5. Mutation
+        6. Genetic drift (optional)
+        7. Migration (optional)
+        """
+        # 1. Calculate fitness of current generation
         self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
-        # --- Population Growth/Shrink Logic ---
+        
+        # 2. Calculate population dynamics
         current_size = len(self.population.organisms)
-
-        # Calculate average fitness
         fitnesses = [org.fitness for org in self.population.organisms]
         mean_fitness = np.mean(fitnesses) if fitnesses else 0
-
-        # Calculate births based on fitness and growth rate
-        births = int(current_size * self.base_growth_rate * mean_fitness)
-
-        # Calculate deaths
-        deaths = int(current_size * self.death_rate)
-
-        # Get new size
+        
+        # Logistic growth: birth rate slows as we approach carrying capacity
+        crowding_factor = max(0, 1 - (current_size / self.carrying_capacity))
+        # Births scale with fitness (higher fitness = more reproduction)
+        birth_rate = self.base_growth_rate * mean_fitness * crowding_factor
+        births = int(current_size * birth_rate)
+        
+        # Deaths: fitness REDUCES death rate (natural selection via differential survival)
+        # At fitness=0: death_rate = base_death_rate
+        # At fitness=1: death_rate = base_death_rate * (1 - fitness_survival_bonus)
+        death_rate = self.base_death_rate * (1 - mean_fitness * self.fitness_survival_bonus)
+        deaths = int(current_size * death_rate)
+        
+        # Calculate new population size
         new_size = current_size + births - deaths
-
-        # Enforce carrying capacity and minimum population
-        new_size = min(new_size, self.carrying_capacity)
-        new_size = max(10, new_size) # Prevent extinction (min 10 orgs)
-
-        # ***IMPORTANT: Update the population's target size***
-        self.population.size = new_size
-        # --- End of new logic ---
+        new_size = max(10, min(new_size, self.carrying_capacity))  # Enforce bounds
         
-        # Natural Selection: Reproduce based on fitness
-        new_organisms = self.selection()
+        # 3. FITNESS-WEIGHTED SELECTION to the new population size
+        new_organisms = self.selection_to_size(new_size)
         
-        # Mutation
+        # 4. Apply evolutionary forces
         self.mutate(new_organisms)
         
-        # Genetic Drift
         if self.genetic_drift_strength > 0:
             new_organisms = self.apply_drift(new_organisms)
         
-        # Gene Flow (Migration)
         if self.migration_rate > 0:
             new_organisms = self.apply_gene_flow(new_organisms)
         
+        # 5. Update population
         self.population.organisms = new_organisms
-        # Recompute fitness for the new population after reproduction/mutation/drift/migration
+        self.population.size = len(new_organisms)
+        
+        # 6. Calculate fitness of new generation and record stats
         self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
         self.generation += 1
-        
-        # Record statistics
         self.record_statistics()
-    
-    def selection(self) -> List[Organism]:
-        """Natural selection through fitness-proportionate reproduction"""
+
+    def selection_to_size(self, target_size: int) -> List[Organism]:
+        """
+        Fitness-weighted selection: fitter organisms more likely to reproduce.
+        Breeds exactly target_size offspring from current population.
+        """
         fitnesses = np.array([org.fitness for org in self.population.organisms])
         
-        # Normalize fitness
+        # Handle edge case: all fitness = 0
         if fitnesses.sum() > 0:
             probabilities = fitnesses / fitnesses.sum()
         else:
             probabilities = np.ones(len(fitnesses)) / len(fitnesses)
         
-        # Select parents
+        # Sample parents with replacement (allows fit individuals to have multiple offspring)
         new_organisms = []
-        for _ in range(self.population.size):
+        for _ in range(target_size):
             parent_idx = np.random.choice(len(self.population.organisms), p=probabilities)
             parent = self.population.organisms[parent_idx]
             offspring = Organism(traits=parent.traits.copy())
@@ -151,27 +162,36 @@ class EvolutionSimulator:
                                     self.population.trait_range[1])
     
     def apply_drift(self, organisms: List[Organism]) -> List[Organism]:
-        """Apply genetic drift (random sampling)"""
+        """
+        Genetic drift: random sampling effect (simulates small population stochasticity).
+        Randomly removes a fraction of the population, then resamples to maintain size.
+        """
         drift_size = int(len(organisms) * (1 - self.genetic_drift_strength))
-        drift_size = max(10, drift_size)  # Minimum population
+        drift_size = max(10, drift_size)  # Minimum viable population
         
         if drift_size < len(organisms):
+            # Random sample (bottleneck event)
             selected_indices = np.random.choice(len(organisms), drift_size, replace=False)
             organisms = [organisms[i] for i in selected_indices]
             
-            # Repopulate to original size
-            while len(organisms) < self.population.size:
+            # Repopulate by cloning survivors (maintains population size)
+            original_size = len(organisms)
+            target_size = int(original_size / (1 - self.genetic_drift_strength))
+            while len(organisms) < target_size:
                 parent = organisms[np.random.randint(len(organisms))]
                 organisms.append(Organism(traits=parent.traits.copy()))
         
         return organisms
     
     def apply_gene_flow(self, organisms: List[Organism]) -> List[Organism]:
-        """Apply gene flow (migration from external population)"""
+        """
+        Gene flow (migration): individuals from an external population enter.
+        Replaces a fraction of current population with random migrants.
+        """
         num_migrants = int(len(organisms) * self.migration_rate)
         
         for _ in range(num_migrants):
-            # Replace random organism with migrant
+            # Replace random organism with migrant (random traits)
             idx = np.random.randint(len(organisms))
             migrant_traits = np.random.uniform(self.population.trait_range[0], 
                                               self.population.trait_range[1], 
@@ -181,7 +201,7 @@ class EvolutionSimulator:
         return organisms
     
     def record_statistics(self):
-        """Record population statistics"""
+        """Record population statistics for plotting"""
         self.history['generations'].append(self.generation)
         
         # Mean fitness
@@ -198,7 +218,7 @@ class EvolutionSimulator:
         self.history['population_size'].append(len(self.population.organisms))
     
     def reset(self):
-        """Reset simulation"""
+        """Reset simulation to initial state"""
         self.population.initialize_population()
         self.generation = 0
         self.history = {
@@ -215,17 +235,17 @@ class SimulatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Evolution Simulator - Natural Selection, Drift & Gene Flow")
-        # --- MODIFIED: Changed geometry for vertical layout ---
-        self.root.geometry("1000x1200") 
+        self.root.geometry("1600x900")
         
         self.simulator = EvolutionSimulator()
         self.running = False
-        self.tick_ms = 100  # Simulation speed (milliseconds per step)
+        self.tick_ms = 100
         self.bottom_right_mode = tk.StringVar(value="Population Size")
+        self.colorbar = None  # Track colorbar to remove it
         
         self.setup_ui()
         
-        # Initialize the plots with the starting population
+        # Initialize plots with starting population
         self.simulator.population.calculate_fitness(self.simulator.optimal_traits, 
                                                     self.simulator.selection_strength)
         self.simulator.record_statistics()
@@ -233,165 +253,161 @@ class SimulatorGUI:
         
     def setup_ui(self):
         """Setup the user interface"""
-        # Control Panel with larger fonts and better spacing
-        control_frame = ttk.Frame(self.root, padding="20")
-        control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        control_frame.columnconfigure(1, weight=1)
+        # Main container with top/bottom split (vertical layout)
+        main_container = ttk.Frame(self.root)
+        main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Configure style for larger fonts
+        # TOP: Control Panel
+        control_frame = ttk.Frame(main_container, padding="20")
+        control_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        # Configure styles
         style = ttk.Style()
         style.configure('TLabel', font=('Arial', 20))
         style.configure('TButton', font=('Arial', 20), padding=10)
-        style.configure('TEntry', font=('Arial', 20))
-        style.configure('TCombobox', font=('Arial', 20))
-
-        row_padding = 8
         
-        # Parameters with sliders AND entry boxes
+        col = 0
+        col_pad = 15
+        
         # Selection Strength
-        ttk.Label(control_frame, text="Selection Strength:").grid(
-            row=0, column=0, sticky=tk.W, pady=row_padding)
+        ttk.Label(control_frame, text="Selection Strength:", font=('Arial', 20, 'bold')).grid(
+            row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.selection_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL, 
-                                         command=self.update_selection, length=500)
+                                         command=self.update_selection, length=400)
         self.selection_scale.set(0.3)
-        self.selection_scale.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.selection_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
+        self.selection_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.selection_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
         self.selection_entry.insert(0, "0.30")
-        self.selection_entry.grid(row=0, column=2, padx=5, pady=row_padding)
+        self.selection_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.selection_entry.bind('<Return>', lambda e: self.update_from_entry('selection'))
+        col += 1
         
         # Mutation Rate
-        ttk.Label(control_frame, text="Mutation Rate:").grid(
-            row=1, column=0, sticky=tk.W, pady=row_padding)
+        ttk.Label(control_frame, text="Mutation Rate:", font=('Arial', 20, 'bold')).grid(
+            row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.mutation_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL,
-                                        command=self.update_mutation, length=300)
+                                        command=self.update_mutation, length=400)
         self.mutation_scale.set(0.1)
-        self.mutation_scale.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.mutation_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
+        self.mutation_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.mutation_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
         self.mutation_entry.insert(0, "0.10")
-        self.mutation_entry.grid(row=1, column=2, padx=5, pady=row_padding)
+        self.mutation_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.mutation_entry.bind('<Return>', lambda e: self.update_from_entry('mutation'))
+        col += 1
         
         # Genetic Drift
-        ttk.Label(control_frame, text="Genetic Drift:").grid(
-            row=2, column=0, sticky=tk.W, pady=row_padding)
+        ttk.Label(control_frame, text="Genetic Drift:", font=('Arial', 20, 'bold')).grid(
+            row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.drift_scale = ttk.Scale(control_frame, from_=0, to=0.5, orient=tk.HORIZONTAL,
-                                     command=self.update_drift, length=300)
+                                     command=self.update_drift, length=400)
         self.drift_scale.set(0)
-        self.drift_scale.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.drift_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
+        self.drift_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.drift_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
         self.drift_entry.insert(0, "0.00")
-        self.drift_entry.grid(row=2, column=2, padx=5, pady=row_padding)
+        self.drift_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.drift_entry.bind('<Return>', lambda e: self.update_from_entry('drift'))
+        col += 1
         
         # Migration Rate
-        ttk.Label(control_frame, text="Migration Rate:").grid(
-            row=3, column=0, sticky=tk.W, pady=row_padding)
+        ttk.Label(control_frame, text="Migration Rate:", font=('Arial', 20, 'bold')).grid(
+            row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.migration_scale = ttk.Scale(control_frame, from_=0, to=0.3, orient=tk.HORIZONTAL,
-                                         command=self.update_migration, length=300)
+                                         command=self.update_migration, length=400)
         self.migration_scale.set(0)
-        self.migration_scale.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.migration_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
+        self.migration_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.migration_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
         self.migration_entry.insert(0, "0.00")
-        self.migration_entry.grid(row=3, column=2, padx=5, pady=row_padding)
+        self.migration_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.migration_entry.bind('<Return>', lambda e: self.update_from_entry('migration'))
         
-        # Optimal trait controls
-        ttk.Label(control_frame, text="Optimal Trait 1:").grid(
-            row=4, column=0, sticky=tk.W, pady=row_padding)
+        # Second row of controls
+        col = 0
+        
+        # Optimal Traits
+        ttk.Label(control_frame, text="Optimal Trait 1:", font=('Arial', 20, 'bold')).grid(
+            row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.trait1_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
-                                      command=self.update_trait1, length=300)
+                                      command=self.update_trait1, length=400)
         self.trait1_scale.set(7.0)
-        self.trait1_scale.grid(row=4, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.trait1_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
+        self.trait1_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.trait1_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
         self.trait1_entry.insert(0, "7.0")
-        self.trait1_entry.grid(row=4, column=2, padx=5, pady=row_padding)
+        self.trait1_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.trait1_entry.bind('<Return>', lambda e: self.update_from_entry('trait1'))
-        
-        # Optimal Trait 2
-        ttk.Label(control_frame, text="Optimal Trait 2:").grid(
-            row=5, column=0, sticky=tk.W, pady=row_padding)
+        col += 1
+
+        ttk.Label(control_frame, text="Optimal Trait 2:", font=('Arial', 20, 'bold')).grid(
+            row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.trait2_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
-                                      command=self.update_trait2, length=300)
-        init_trait2 = float(self.simulator.optimal_traits[1]) if len(self.simulator.optimal_traits) > 1 else 5.0
-        self.trait2_scale.set(init_trait2)
-        self.trait2_scale.grid(row=5, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.trait2_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
-        self.trait2_entry.insert(0, f"{init_trait2:.1f}")
-        self.trait2_entry.grid(row=5, column=2, padx=5, pady=row_padding)
+                                      command=self.update_trait2, length=400)
+        self.trait2_scale.set(5.0)
+        self.trait2_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.trait2_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.trait2_entry.insert(0, "5.0")
+        self.trait2_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.trait2_entry.bind('<Return>', lambda e: self.update_from_entry('trait2'))
-        
-        # Optimal Trait 3
-        ttk.Label(control_frame, text="Optimal Trait 3:").grid(
-            row=6, column=0, sticky=tk.W, pady=row_padding)
+        col += 1
+
+        ttk.Label(control_frame, text="Optimal Trait 3:", font=('Arial', 20, 'bold')).grid(
+            row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.trait3_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
-                                      command=self.update_trait3, length=300)
-        init_trait3 = float(self.simulator.optimal_traits[2]) if len(self.simulator.optimal_traits) > 2 else 8.0
-        self.trait3_scale.set(init_trait3)
-        self.trait3_scale.grid(row=6, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.trait3_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
-        self.trait3_entry.insert(0, f"{init_trait3:.1f}")
-        self.trait3_entry.grid(row=6, column=2, padx=5, pady=row_padding)
+                                      command=self.update_trait3, length=400)
+        self.trait3_scale.set(8.0)
+        self.trait3_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.trait3_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.trait3_entry.insert(0, "8.0")
+        self.trait3_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.trait3_entry.bind('<Return>', lambda e: self.update_from_entry('trait3'))
+        col += 1
         
-        # Simulation speed control
-        ttk.Label(control_frame, text="Speed (ms/step):").grid(
-            row=7, column=0, sticky=tk.W, pady=row_padding)
+        # Speed control
+        ttk.Label(control_frame, text="Speed (ms/step):", font=('Arial', 20, 'bold')).grid(
+            row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.speed_scale = ttk.Scale(control_frame, from_=10, to=2000, orient=tk.HORIZONTAL,
-                                     command=self.update_speed, length=300)
+                                     command=self.update_speed, length=400)
         self.speed_scale.set(self.tick_ms)
-        self.speed_scale.grid(row=7, column=1, sticky=(tk.W, tk.E), padx=10, pady=row_padding)
-        self.speed_entry = ttk.Entry(control_frame, width=8, font=('Arial', 20))
+        self.speed_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.speed_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
         self.speed_entry.insert(0, f"{self.tick_ms}")
-        self.speed_entry.grid(row=7, column=2, padx=5, pady=row_padding)
+        self.speed_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
         
-        # Bottom-right view selector
-        ttk.Label(control_frame, text="Bottom-right view:").grid(
-            row=8, column=0, sticky=tk.W, pady=row_padding)
-        self.view_selector = ttk.Combobox(control_frame, width=18, state='readonly',
+        # Bottom row: View selector and buttons
+        bottom_row = ttk.Frame(control_frame)
+        bottom_row.grid(row=6, column=0, columnspan=4, pady=15)
+
+        ttk.Label(bottom_row, text="Bottom-right view:", font=('Arial', 20, 'bold')).pack(side=tk.LEFT, padx=10)
+        self.view_selector = ttk.Combobox(bottom_row, width=18, state='readonly',
                                           values=["Population Size", "Trait Space 2D", "Trait Space 3D"],
                                           textvariable=self.bottom_right_mode, font=('Arial', 20))
-        self.view_selector.grid(row=8, column=1, sticky=tk.W, padx=10, pady=row_padding)
+        self.view_selector.pack(side=tk.LEFT, padx=10)
         self.view_selector.bind('<<ComboboxSelected>>', lambda e: self.update_plots())
         self.view_selector.option_add('*TCombobox*Listbox.Font', ('Arial', 20))
 
-        # Buttons
-        button_frame = ttk.Frame(control_frame)
-        button_frame.grid(row=9, column=0, columnspan=3, pady=20)
         
-        self.start_button = ttk.Button(button_frame, text="Start Simulation", 
+        # Buttons
+        self.start_button = ttk.Button(bottom_row, text="Start Simulation", 
                                        command=self.toggle_simulation)
         self.start_button.pack(side=tk.LEFT, padx=10)
         
-        ttk.Button(button_frame, text="Step", command=self.step).pack(side=tk.LEFT, padx=10)
-        ttk.Button(button_frame, text="Reset", command=self.reset).pack(side=tk.LEFT, padx=10)
+        ttk.Button(bottom_row, text="Step", command=self.step).pack(side=tk.LEFT, padx=10)
+        ttk.Button(bottom_row, text="Reset", command=self.reset).pack(side=tk.LEFT, padx=10)
         
-        self.gen_label = ttk.Label(control_frame, text="Generation: 0", font=('Arial', 20, 'bold'))
-        self.gen_label.grid(row=10, column=0, columnspan=3, pady=15)
+        self.gen_label = ttk.Label(bottom_row, text="Generation: 0", font=('Arial', 20, 'bold'))
+        self.gen_label.pack(side=tk.LEFT, padx=20)
         
-        # --- MODIFIED: Plots now go in a frame below the controls ---
-        self.figure, self.axes = plt.subplots(2, 3, figsize=(14, 8))
+        # BOTTOM: Plot area
+        plot_frame = ttk.Frame(main_container)
+        plot_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        
+        self.figure, self.axes = plt.subplots(2, 3, figsize=(16, 9))
         self.figure.tight_layout(pad=3.0)
         
-        canvas_frame = ttk.Frame(self.root)
-        # --- MODIFIED: Changed grid to row=1, column=0 ---
-        canvas_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)) 
-        
-        self.canvas = FigureCanvasTkAgg(self.figure, master=canvas_frame)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
-        # --- MODIFIED: Layout weights for vertical stacking ---
-        # Column 0 (the only column) expands
-        self.root.columnconfigure(0, weight=1) 
-        # Row 0 (controls) does not expand
-        self.root.rowconfigure(0, weight=0)
-        # Row 1 (canvas) expands
-        self.root.rowconfigure(1, weight=1)
         
     def update_selection(self, val):
         self.simulator.selection_strength = float(val)
-        # Guard during initialization before entry widgets exist
         if hasattr(self, 'selection_entry'):
             self.selection_entry.delete(0, tk.END)
             self.selection_entry.insert(0, f"{float(val):.2f}")
@@ -448,7 +464,7 @@ class SimulatorGUI:
         try:
             if param_name == 'selection':
                 val = float(self.selection_entry.get())
-                val = max(0.0, min(1.0, val))  # Clamp to valid range
+                val = max(0.0, min(1.0, val))
                 self.selection_scale.set(val)
                 self.simulator.selection_strength = val
             elif param_name == 'mutation':
@@ -489,7 +505,7 @@ class SimulatorGUI:
                 self.speed_scale.set(val)
                 self.tick_ms = val
         except ValueError:
-            pass  # Invalid input, ignore
+            pass
     
     def toggle_simulation(self):
         self.running = not self.running
@@ -513,7 +529,6 @@ class SimulatorGUI:
         self.running = False
         self.start_button.config(text="Start Simulation")
         self.simulator.reset()
-        # Recompute initial fitness and seed history so plots aren't empty/flat
         self.simulator.population.calculate_fitness(self.simulator.optimal_traits,
                                                     self.simulator.selection_strength)
         self.simulator.record_statistics()
@@ -522,21 +537,29 @@ class SimulatorGUI:
     
     def update_plots(self):
         """Update all plots"""
+        # Remove old colorbar if it exists
+        if self.colorbar is not None:
+            self.colorbar.remove()
+            self.colorbar = None
+        
         for ax in self.axes.flat:
             ax.clear()
         
         history = self.simulator.history
         
         if len(history['generations']) > 0:
-            # Plot 1: Mean Fitness over time
+            # Plot 1: Mean Fitness
             self.axes[0, 0].plot(history['generations'], history['mean_fitness'], 
                                 'b-', linewidth=2)
+            self.axes[0, 0].axhline(1.0, color='gray', linestyle='--', alpha=0.4, label='Max fitness')
             self.axes[0, 0].set_xlabel('Generation')
             self.axes[0, 0].set_ylabel('Mean Fitness')
-            self.axes[0, 0].set_title('Natural Selection: Fitness Evolution')
+            self.axes[0, 0].set_title('Fitness Evolution')
+            self.axes[0, 0].set_ylim(0, 1.05)
             self.axes[0, 0].grid(True, alpha=0.3)
+            self.axes[0, 0].legend()
             
-            # Plot 2: Trait means over time
+            # Plot 2: Trait means
             colors = ['red', 'green', 'blue']
             for i in range(self.simulator.population.num_traits):
                 self.axes[0, 1].plot(history['generations'], history['trait_means'][i],
@@ -549,17 +572,17 @@ class SimulatorGUI:
             self.axes[0, 1].legend()
             self.axes[0, 1].grid(True, alpha=0.3)
             
-            # Plot 3: Trait variance (Genetic Drift indicator)
+            # Plot 3: Trait variance
             for i in range(self.simulator.population.num_traits):
                 self.axes[0, 2].plot(history['generations'], history['trait_stds'][i],
                                     color=colors[i], label=f'Trait {i+1}', linewidth=2)
             self.axes[0, 2].set_xlabel('Generation')
-            self.axes[0, 2].set_ylabel('Trait Standard Deviation')
-            self.axes[0, 2].set_title('Genetic Drift: Trait Variance')
+            self.axes[0, 2].set_ylabel('Trait Std Dev')
+            self.axes[0, 2].set_title('Genetic Variance (Drift Effect)')
             self.axes[0, 2].legend()
             self.axes[0, 2].grid(True, alpha=0.3)
             
-            # Plot 4: Current trait distribution
+            # Plot 4: Trait distribution
             trait_matrix = np.array([org.traits for org in self.simulator.population.organisms])
             for i in range(min(3, self.simulator.population.num_traits)):
                 self.axes[1, 0].hist(trait_matrix[:, i], bins=20, alpha=0.5, 
@@ -575,21 +598,19 @@ class SimulatorGUI:
             self.axes[1, 1].hist(fitnesses, bins=30, color='purple', alpha=0.7, edgecolor='black')
             self.axes[1, 1].set_xlabel('Fitness')
             self.axes[1, 1].set_ylabel('Number of Organisms')
-            self.axes[1, 1].set_title('Current Fitness Distribution')
+            self.axes[1, 1].set_title('Fitness Distribution')
             self.axes[1, 1].grid(True, alpha=0.3)
             
-            # Plot 6: Bottom-right view toggle
-            mode = self.bottom_right_mode.get() if hasattr(self, 'bottom_right_mode') else 'Population Size'
-            # Ensure correct axis type for the selected mode
+            # Plot 6: Switchable view
+            mode = self.bottom_right_mode.get()
+            
             def ensure_axis(is3d: bool):
                 ax = self.axes[1, 2]
-                ax_is_3d = getattr(ax, 'name', '') == '3d'
+                ax_is_3d = hasattr(ax, 'name') and ax.name == '3d'
                 if is3d and not ax_is_3d:
-                    # replace with 3D axis
                     self.figure.delaxes(ax)
                     self.axes[1, 2] = self.figure.add_subplot(2, 3, 6, projection='3d')
                 elif not is3d and ax_is_3d:
-                    # replace with 2D axis
                     self.figure.delaxes(ax)
                     self.axes[1, 2] = self.figure.add_subplot(2, 3, 6)
 
@@ -597,31 +618,47 @@ class SimulatorGUI:
                 ensure_axis(False)
                 self.axes[1, 2].plot(history['generations'], history['population_size'],
                                      'g-', linewidth=2)
+                self.axes[1, 2].axhline(self.simulator.carrying_capacity, 
+                                       color='red', linestyle='--', alpha=0.5, label='Carrying capacity')
                 self.axes[1, 2].set_xlabel('Generation')
                 self.axes[1, 2].set_ylabel('Population Size')
-                self.axes[1, 2].set_title('Population Size (Gene Flow Effect)')
+                self.axes[1, 2].set_title('Population Dynamics')
+                self.axes[1, 2].legend()
                 self.axes[1, 2].grid(True, alpha=0.3)
             elif mode == 'Trait Space 2D':
                 ensure_axis(False)
                 trait_matrix = np.array([org.traits for org in self.simulator.population.organisms])
                 fitnesses = [org.fitness for org in self.simulator.population.organisms]
-                self.axes[1, 2].scatter(trait_matrix[:, 0], trait_matrix[:, 1],
-                                        c=fitnesses, cmap='viridis', s=30, edgecolor='none')
+                scatter = self.axes[1, 2].scatter(trait_matrix[:, 0], trait_matrix[:, 1],
+                                        c=fitnesses, cmap='viridis', s=30, edgecolor='none', 
+                                        vmin=0, vmax=1)
+                self.axes[1, 2].scatter([self.simulator.optimal_traits[0]], 
+                                       [self.simulator.optimal_traits[1]],
+                                       marker='*', s=300, c='red', edgecolor='black', 
+                                       label='Optimum', zorder=10)
                 self.axes[1, 2].set_xlabel('Trait 1')
                 self.axes[1, 2].set_ylabel('Trait 2')
-                self.axes[1, 2].set_title('Trait Space (colored by fitness)')
+                self.axes[1, 2].set_title('Trait Space 2D')
+                self.axes[1, 2].legend()
                 self.axes[1, 2].grid(True, alpha=0.2)
+                # Store colorbar reference so we can remove it next time
+                self.colorbar = self.figure.colorbar(scatter, ax=self.axes[1, 2], label='Fitness')
             elif mode == 'Trait Space 3D':
                 ensure_axis(True)
                 trait_matrix = np.array([org.traits for org in self.simulator.population.organisms])
                 fitnesses = [org.fitness for org in self.simulator.population.organisms]
                 ax3d = self.axes[1, 2]
                 ax3d.scatter(trait_matrix[:, 0], trait_matrix[:, 1], trait_matrix[:, 2],
-                             c=fitnesses, cmap='viridis', s=15, depthshade=True)
+                             c=fitnesses, cmap='viridis', s=15, depthshade=True, vmin=0, vmax=1)
+                ax3d.scatter([self.simulator.optimal_traits[0]], 
+                            [self.simulator.optimal_traits[1]],
+                            [self.simulator.optimal_traits[2]],
+                            marker='*', s=200, c='red', edgecolor='black', label='Optimum')
                 ax3d.set_xlabel('Trait 1')
                 ax3d.set_ylabel('Trait 2')
                 ax3d.set_zlabel('Trait 3')
-                ax3d.set_title('3D Trait Space (colored by fitness)')
+                ax3d.set_title('Trait Space 3D')
+                ax3d.legend()
         
         self.figure.tight_layout()
         self.canvas.draw()
