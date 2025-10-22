@@ -324,9 +324,10 @@ class SimulatorGUI:
             row=8, column=0, sticky=tk.W, pady=row_padding)
         self.view_selector = ttk.Combobox(control_frame, width=18, state='readonly',
                                           values=["Population Size", "Trait Space 2D", "Trait Space 3D"],
-                                          textvariable=self.bottom_right_mode)
+                                          textvariable=self.bottom_right_mode, font=('Arial', 20))
         self.view_selector.grid(row=8, column=1, sticky=tk.W, padx=10, pady=row_padding)
         self.view_selector.bind('<<ComboboxSelected>>', lambda e: self.update_plots())
+        self.view_selector.option_add('*TCombobox*Listbox.Font', ('Arial', 20))
 
         # Buttons
         button_frame = ttk.Frame(control_frame)
