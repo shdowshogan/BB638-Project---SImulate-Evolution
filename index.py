@@ -48,6 +48,7 @@ class EvolutionSimulator:
     """Main simulator for evolutionary processes"""
     def __init__(self, population_size: int = 200, num_traits: int = 3):
         self.population = Population(population_size, num_traits)
+        self.fixed_population_size = population_size  # For Wright-Fisher model
         self.generation = 0
         self.history = {
             'generations': [],
@@ -66,22 +67,28 @@ class EvolutionSimulator:
         self.migration_rate = 0.0
         self.genetic_drift_strength = 0.0
         
-        # Population dynamics parameters (scientifically corrected)
+        # Population dynamics parameters (for Ecological model)
         self.carrying_capacity = 1000
-        self.base_growth_rate = 1.2  # Growth rate when fitness=1 and no crowding
-        self.base_death_rate = 0.4   # Death rate when fitness=0
-        self.fitness_survival_bonus = 0.35  # Max reduction in death (fitness shields from death)
+        self.base_growth_rate = 1.2
+        self.base_death_rate = 0.4
+        self.fitness_survival_bonus = 0.35
+        
+        # Model selection
+        self.model_type = "Ecological"  # "Ecological" or "Wright-Fisher"
         
     def simulate_generation(self):
+        """Simulate one generation based on selected model"""
+        if self.model_type == "Wright-Fisher":
+            self.simulate_wright_fisher()
+        else:
+            self.simulate_ecological()
+    
+    def simulate_ecological(self):
         """
-        Simulate one generation with biologically realistic dynamics:
-        1. Calculate current fitness
-        2. Determine births (fitness-dependent, logistic growth)
-        3. Determine deaths (fitness reduces death rate)
-        4. Fitness-weighted selection to new size
-        5. Mutation
-        6. Genetic drift (optional)
-        7. Migration (optional)
+        Ecological model with variable population size:
+        - Births and deaths depend on fitness
+        - Logistic growth with carrying capacity
+        - Optional genetic drift via bottleneck events
         """
         # 1. Calculate fitness of current generation
         self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
@@ -93,19 +100,16 @@ class EvolutionSimulator:
         
         # Logistic growth: birth rate slows as we approach carrying capacity
         crowding_factor = max(0, 1 - (current_size / self.carrying_capacity))
-        # Births scale with fitness (higher fitness = more reproduction)
         birth_rate = self.base_growth_rate * mean_fitness * crowding_factor
         births = int(current_size * birth_rate)
         
-        # Deaths: fitness REDUCES death rate (natural selection via differential survival)
-        # At fitness=0: death_rate = base_death_rate
-        # At fitness=1: death_rate = base_death_rate * (1 - fitness_survival_bonus)
+        # Deaths: fitness REDUCES death rate
         death_rate = self.base_death_rate * (1 - mean_fitness * self.fitness_survival_bonus)
         deaths = int(current_size * death_rate)
         
         # Calculate new population size
         new_size = current_size + births - deaths
-        new_size = max(10, min(new_size, self.carrying_capacity))  # Enforce bounds
+        new_size = max(10, min(new_size, self.carrying_capacity))
         
         # 3. FITNESS-WEIGHTED SELECTION to the new population size
         new_organisms = self.selection_to_size(new_size)
@@ -120,6 +124,36 @@ class EvolutionSimulator:
             new_organisms = self.apply_gene_flow(new_organisms)
         
         # 5. Update population
+        self.population.organisms = new_organisms
+        self.population.size = len(new_organisms)
+        
+        # 6. Calculate fitness of new generation and record stats
+        self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
+        self.generation += 1
+        self.record_statistics()
+    
+    def simulate_wright_fisher(self):
+        """
+        Wright-Fisher model with fixed population size:
+        - Non-overlapping generations
+        - Fixed population size (N)
+        - Multinomial sampling with replacement
+        - Genetic drift is automatic (sampling variance)
+        """
+        # 1. Calculate fitness of current generation
+        self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
+        
+        # 2. Wright-Fisher sampling: create exactly N offspring (fixed size)
+        new_organisms = self.selection_to_size(self.fixed_population_size)
+        
+        # 3. Apply mutation
+        self.mutate(new_organisms)
+        
+        # 4. Optional: gene flow (migration)
+        if self.migration_rate > 0:
+            new_organisms = self.apply_gene_flow(new_organisms)
+        
+        # 5. Replace parent generation completely (non-overlapping generations)
         self.population.organisms = new_organisms
         self.population.size = len(new_organisms)
         
@@ -163,18 +197,18 @@ class EvolutionSimulator:
     
     def apply_drift(self, organisms: List[Organism]) -> List[Organism]:
         """
-        Genetic drift: random sampling effect (simulates small population stochasticity).
-        Randomly removes a fraction of the population, then resamples to maintain size.
+        Genetic drift (for Ecological model only): bottleneck event.
+        Note: In Wright-Fisher, drift is automatic from sampling variance.
         """
         drift_size = int(len(organisms) * (1 - self.genetic_drift_strength))
-        drift_size = max(10, drift_size)  # Minimum viable population
+        drift_size = max(10, drift_size)
         
         if drift_size < len(organisms):
             # Random sample (bottleneck event)
             selected_indices = np.random.choice(len(organisms), drift_size, replace=False)
             organisms = [organisms[i] for i in selected_indices]
             
-            # Repopulate by cloning survivors (maintains population size)
+            # Repopulate by cloning survivors
             original_size = len(organisms)
             target_size = int(original_size / (1 - self.genetic_drift_strength))
             while len(organisms) < target_size:
@@ -241,7 +275,7 @@ class SimulatorGUI:
         self.running = False
         self.tick_ms = 100
         self.bottom_right_mode = tk.StringVar(value="Population Size")
-        self.colorbar = None  # Track colorbar to remove it
+        self.colorbar = None
         
         self.setup_ui()
         
@@ -295,7 +329,7 @@ class SimulatorGUI:
         self.mutation_entry.bind('<Return>', lambda e: self.update_from_entry('mutation'))
         col += 1
         
-        # Genetic Drift
+        # Genetic Drift (only for Ecological model)
         ttk.Label(control_frame, text="Genetic Drift:", font=('Arial', 20, 'bold')).grid(
             row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
         self.drift_scale = ttk.Scale(control_frame, from_=0, to=0.5, orient=tk.HORIZONTAL,
@@ -372,10 +406,19 @@ class SimulatorGUI:
         self.speed_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
         
-        # Bottom row: View selector and buttons
+        # Bottom row: Model selector, View selector and buttons
         bottom_row = ttk.Frame(control_frame)
         bottom_row.grid(row=6, column=0, columnspan=4, pady=15)
 
+        # Model selector (NEW!)
+        ttk.Label(bottom_row, text="Model:", font=('Arial', 20, 'bold')).pack(side=tk.LEFT, padx=10)
+        self.model_var = tk.StringVar(value="Ecological")
+        self.model_selector = ttk.Combobox(bottom_row, width=15, state='readonly',
+                                          values=["Ecological", "Wright-Fisher"],
+                                          textvariable=self.model_var, font=('Arial', 20))
+        self.model_selector.pack(side=tk.LEFT, padx=10)
+        self.model_selector.bind('<<ComboboxSelected>>', self.change_model)
+        
         ttk.Label(bottom_row, text="Bottom-right view:", font=('Arial', 20, 'bold')).pack(side=tk.LEFT, padx=10)
         self.view_selector = ttk.Combobox(bottom_row, width=18, state='readonly',
                                           values=["Population Size", "Trait Space 2D", "Trait Space 3D"],
@@ -396,6 +439,11 @@ class SimulatorGUI:
         self.gen_label = ttk.Label(bottom_row, text="Generation: 0", font=('Arial', 20, 'bold'))
         self.gen_label.pack(side=tk.LEFT, padx=20)
         
+        # Model info label
+        self.model_info_label = ttk.Label(bottom_row, text="[Ecological: Variable pop size]", 
+                                          font=('Arial', 16), foreground='blue')
+        self.model_info_label.pack(side=tk.LEFT, padx=10)
+        
         # BOTTOM: Plot area
         plot_frame = ttk.Frame(main_container)
         plot_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
@@ -405,6 +453,26 @@ class SimulatorGUI:
         
         self.canvas = FigureCanvasTkAgg(self.figure, master=plot_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+    
+    def change_model(self, event=None):
+        """Switch between Ecological and Wright-Fisher models"""
+        model = self.model_var.get()
+        self.simulator.model_type = model
+        
+        # Update UI based on model
+        if model == "Wright-Fisher":
+            self.model_info_label.config(text="[Wright-Fisher: Fixed pop size]", foreground='green')
+            # Disable drift control (automatic in Wright-Fisher)
+            self.drift_scale.config(state='disabled')
+            self.drift_entry.config(state='disabled')
+        else:
+            self.model_info_label.config(text="[Ecological: Variable pop size]", foreground='blue')
+            # Enable drift control
+            self.drift_scale.config(state='normal')
+            self.drift_entry.config(state='normal')
+        
+        # Reset simulation with new model
+        self.reset()
         
     def update_selection(self, val):
         self.simulator.selection_strength = float(val)
@@ -578,7 +646,8 @@ class SimulatorGUI:
                                     color=colors[i], label=f'Trait {i+1}', linewidth=2)
             self.axes[0, 2].set_xlabel('Generation')
             self.axes[0, 2].set_ylabel('Trait Std Dev')
-            self.axes[0, 2].set_title('Genetic Variance (Drift Effect)')
+            title_suffix = "(Automatic)" if self.simulator.model_type == "Wright-Fisher" else "(Drift Effect)"
+            self.axes[0, 2].set_title(f'Genetic Variance {title_suffix}')
             self.axes[0, 2].legend()
             self.axes[0, 2].grid(True, alpha=0.3)
             
@@ -618,11 +687,20 @@ class SimulatorGUI:
                 ensure_axis(False)
                 self.axes[1, 2].plot(history['generations'], history['population_size'],
                                      'g-', linewidth=2)
-                self.axes[1, 2].axhline(self.simulator.carrying_capacity, 
-                                       color='red', linestyle='--', alpha=0.5, label='Carrying capacity')
+                
+                # Show carrying capacity line only for Ecological model
+                if self.simulator.model_type == "Ecological":
+                    self.axes[1, 2].axhline(self.simulator.carrying_capacity, 
+                                           color='red', linestyle='--', alpha=0.5, label='Carrying capacity')
+                else:
+                    # Show fixed population size for Wright-Fisher
+                    self.axes[1, 2].axhline(self.simulator.fixed_population_size,
+                                           color='blue', linestyle='--', alpha=0.5, label='Fixed pop size')
+                
                 self.axes[1, 2].set_xlabel('Generation')
                 self.axes[1, 2].set_ylabel('Population Size')
-                self.axes[1, 2].set_title('Population Dynamics')
+                title = 'Population Dynamics' if self.simulator.model_type == "Ecological" else 'Population Size (Fixed)'
+                self.axes[1, 2].set_title(title)
                 self.axes[1, 2].legend()
                 self.axes[1, 2].grid(True, alpha=0.3)
             elif mode == 'Trait Space 2D':
@@ -641,7 +719,6 @@ class SimulatorGUI:
                 self.axes[1, 2].set_title('Trait Space 2D')
                 self.axes[1, 2].legend()
                 self.axes[1, 2].grid(True, alpha=0.2)
-                # Store colorbar reference so we can remove it next time
                 self.colorbar = self.figure.colorbar(scatter, ax=self.axes[1, 2], label='Fitness')
             elif mode == 'Trait Space 3D':
                 ensure_axis(True)
