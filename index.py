@@ -188,7 +188,8 @@ class SimulatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Evolution Simulator - Natural Selection, Drift & Gene Flow")
-        self.root.geometry("1600x1000")
+        # --- MODIFIED: Changed geometry for vertical layout ---
+        self.root.geometry("1000x1200") 
         
         self.simulator = EvolutionSimulator()
         self.running = False
@@ -338,20 +339,24 @@ class SimulatorGUI:
         self.gen_label = ttk.Label(control_frame, text="Generation: 0", font=('Arial', 14, 'bold'))
         self.gen_label.grid(row=10, column=0, columnspan=3, pady=15)
         
-        # Plots on the right
+        # --- MODIFIED: Plots now go in a frame below the controls ---
         self.figure, self.axes = plt.subplots(2, 3, figsize=(14, 8))
         self.figure.tight_layout(pad=3.0)
         
         canvas_frame = ttk.Frame(self.root)
-        canvas_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # --- MODIFIED: Changed grid to row=1, column=0 ---
+        canvas_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)) 
         
         self.canvas = FigureCanvasTkAgg(self.figure, master=canvas_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
-        # Layout weights: left controls fixed, right plots expandable
-        self.root.columnconfigure(0, weight=0)
-        self.root.columnconfigure(1, weight=1)
-        self.root.rowconfigure(0, weight=1)
+        # --- MODIFIED: Layout weights for vertical stacking ---
+        # Column 0 (the only column) expands
+        self.root.columnconfigure(0, weight=1) 
+        # Row 0 (controls) does not expand
+        self.root.rowconfigure(0, weight=0)
+        # Row 1 (canvas) expands
+        self.root.rowconfigure(1, weight=1)
         
     def update_selection(self, val):
         self.simulator.selection_strength = float(val)
