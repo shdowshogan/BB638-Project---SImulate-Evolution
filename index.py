@@ -26,11 +26,26 @@ class Population:
         self.organisms: List[Organism] = []
         self.initialize_population()
         
-    def initialize_population(self):
-        """Create initial random population"""
+    def initialize_population(self, start_near_optimal=False, optimal_traits=None):
+        """Initialize population with organisms
+        Args:
+            start_near_optimal: If True, center around optimal_traits
+            optimal_traits: Target traits (uses [5,5,5] if None)
+        """
         self.organisms = []
+    
+        if start_near_optimal and optimal_traits is not None:
+            # Start close to optimal (for stable demos)
+            loc = optimal_traits
+            scale = 1.5  # Narrow variation around optimal
+        else:
+            # Start at middle of range (default evolutionary scenario)
+            loc = [5.0, 5.0, 5.0]
+            scale = 3.0  # Wide variation
+        
         for _ in range(self.size):
-            traits = np.random.uniform(self.trait_range[0], self.trait_range[1], self.num_traits)
+            traits = np.random.normal(loc=loc, scale=scale, size=self.num_traits)
+            traits = np.clip(traits, self.trait_range[0], self.trait_range[1])
             self.organisms.append(Organism(traits=traits))
     
     def calculate_fitness(self, optimal_traits: np.ndarray, selection_strength: float):
@@ -69,9 +84,9 @@ class EvolutionSimulator:
         
         # Population dynamics parameters (for Ecological model)
         self.carrying_capacity = 1000
-        self.base_growth_rate = 1.2
-        self.base_death_rate = 0.4
-        self.fitness_survival_bonus = 0.35
+        self.base_growth_rate = 0.6
+        self.base_death_rate = 0.2
+        self.fitness_survival_bonus = 0.6
         
         # Model selection
         self.model_type = "Ecological"  # "Ecological" or "Wright-Fisher"
@@ -253,7 +268,6 @@ class EvolutionSimulator:
     
     def reset(self):
         """Reset simulation to initial state"""
-        self.population.initialize_population()
         self.generation = 0
         self.history = {
             'generations': [],
@@ -263,6 +277,18 @@ class EvolutionSimulator:
             'allele_frequencies': [],
             'population_size': []
         }
+        
+        # Option 1: Start random (normal case)
+        self.population.initialize_population()
+        
+        # Option 2: Start near optimal (uncomment for stable demos)
+        # self.population.initialize_population(
+        #     start_near_optimal=True, 
+        #     optimal_traits=self.optimal_traits
+        # )
+        
+        self.population.calculate_fitness(self.optimal_traits, self.selection_strength)
+        self.record_statistics()
 
 class SimulatorGUI:
     """GUI for the evolution simulator"""
@@ -292,8 +318,8 @@ class SimulatorGUI:
         main_container.pack(fill=tk.BOTH, expand=True)
         
         # TOP: Control Panel
-        control_frame = ttk.Frame(main_container, padding="20")
-        control_frame.pack(side=tk.TOP, fill=tk.X)
+        self.control_frame = ttk.Frame(main_container, padding="20")
+        self.control_frame.pack(side=tk.TOP, fill=tk.X)
         
         # Configure styles
         style = ttk.Style()
@@ -304,52 +330,52 @@ class SimulatorGUI:
         col_pad = 15
         
         # Selection Strength
-        ttk.Label(control_frame, text="Selection Strength:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Selection Strength:", font=('Arial', 20, 'bold')).grid(
             row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.selection_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL, 
+        self.selection_scale = ttk.Scale(self.control_frame, from_=0, to=1, orient=tk.HORIZONTAL, 
                                          command=self.update_selection, length=400)
         self.selection_scale.set(0.3)
         self.selection_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.selection_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.selection_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.selection_entry.insert(0, "0.30")
         self.selection_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.selection_entry.bind('<Return>', lambda e: self.update_from_entry('selection'))
         col += 1
         
         # Mutation Rate
-        ttk.Label(control_frame, text="Mutation Rate:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Mutation Rate:", font=('Arial', 20, 'bold')).grid(
             row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.mutation_scale = ttk.Scale(control_frame, from_=0, to=1, orient=tk.HORIZONTAL,
+        self.mutation_scale = ttk.Scale(self.control_frame, from_=0, to=1, orient=tk.HORIZONTAL,
                                         command=self.update_mutation, length=400)
         self.mutation_scale.set(0.1)
         self.mutation_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.mutation_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.mutation_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.mutation_entry.insert(0, "0.10")
         self.mutation_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.mutation_entry.bind('<Return>', lambda e: self.update_from_entry('mutation'))
         col += 1
         
         # Genetic Drift (only for Ecological model)
-        ttk.Label(control_frame, text="Genetic Drift:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Genetic Drift:", font=('Arial', 20, 'bold')).grid(
             row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.drift_scale = ttk.Scale(control_frame, from_=0, to=0.5, orient=tk.HORIZONTAL,
+        self.drift_scale = ttk.Scale(self.control_frame, from_=0, to=0.5, orient=tk.HORIZONTAL,
                                      command=self.update_drift, length=400)
         self.drift_scale.set(0)
         self.drift_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.drift_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.drift_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.drift_entry.insert(0, "0.00")
         self.drift_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.drift_entry.bind('<Return>', lambda e: self.update_from_entry('drift'))
         col += 1
         
         # Migration Rate
-        ttk.Label(control_frame, text="Migration Rate:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Migration Rate:", font=('Arial', 20, 'bold')).grid(
             row=0, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.migration_scale = ttk.Scale(control_frame, from_=0, to=0.3, orient=tk.HORIZONTAL,
+        self.migration_scale = ttk.Scale(self.control_frame, from_=0, to=0.3, orient=tk.HORIZONTAL,
                                          command=self.update_migration, length=400)
         self.migration_scale.set(0)
         self.migration_scale.grid(row=1, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.migration_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.migration_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.migration_entry.insert(0, "0.00")
         self.migration_entry.grid(row=2, column=col, padx=col_pad, pady=5)
         self.migration_entry.bind('<Return>', lambda e: self.update_from_entry('migration'))
@@ -358,56 +384,109 @@ class SimulatorGUI:
         col = 0
         
         # Optimal Traits
-        ttk.Label(control_frame, text="Optimal Trait 1:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Optimal Trait 1:", font=('Arial', 20, 'bold')).grid(
             row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.trait1_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+        self.trait1_scale = ttk.Scale(self.control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
                                       command=self.update_trait1, length=400)
         self.trait1_scale.set(7.0)
         self.trait1_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.trait1_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.trait1_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.trait1_entry.insert(0, "7.0")
         self.trait1_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.trait1_entry.bind('<Return>', lambda e: self.update_from_entry('trait1'))
         col += 1
 
-        ttk.Label(control_frame, text="Optimal Trait 2:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Optimal Trait 2:", font=('Arial', 20, 'bold')).grid(
             row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.trait2_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+        self.trait2_scale = ttk.Scale(self.control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
                                       command=self.update_trait2, length=400)
         self.trait2_scale.set(5.0)
         self.trait2_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.trait2_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.trait2_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.trait2_entry.insert(0, "5.0")
         self.trait2_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.trait2_entry.bind('<Return>', lambda e: self.update_from_entry('trait2'))
         col += 1
 
-        ttk.Label(control_frame, text="Optimal Trait 3:", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Optimal Trait 3:", font=('Arial', 20, 'bold')).grid(
             row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.trait3_scale = ttk.Scale(control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
+        self.trait3_scale = ttk.Scale(self.control_frame, from_=0, to=10, orient=tk.HORIZONTAL,
                                       command=self.update_trait3, length=400)
         self.trait3_scale.set(8.0)
         self.trait3_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.trait3_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.trait3_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.trait3_entry.insert(0, "8.0")
         self.trait3_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.trait3_entry.bind('<Return>', lambda e: self.update_from_entry('trait3'))
         col += 1
         
         # Speed control
-        ttk.Label(control_frame, text="Speed (ms/step):", font=('Arial', 20, 'bold')).grid(
+        ttk.Label(self.control_frame, text="Speed (ms/step):", font=('Arial', 20, 'bold')).grid(
             row=3, column=col, sticky=tk.W, padx=col_pad, pady=5)
-        self.speed_scale = ttk.Scale(control_frame, from_=10, to=2000, orient=tk.HORIZONTAL,
+        self.speed_scale = ttk.Scale(self.control_frame, from_=10, to=2000, orient=tk.HORIZONTAL,
                                      command=self.update_speed, length=400)
         self.speed_scale.set(self.tick_ms)
         self.speed_scale.grid(row=4, column=col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
-        self.speed_entry = ttk.Entry(control_frame, width=10, font=('Arial', 20))
+        self.speed_entry = ttk.Entry(self.control_frame, width=10, font=('Arial', 20))
         self.speed_entry.insert(0, f"{self.tick_ms}")
         self.speed_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
         
+        # ==================== PRESET BUTTONS ====================
+        preset_frame = ttk.LabelFrame(self.control_frame, text="Quick Presets", padding="10")
+        preset_frame.grid(row=10, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=15)
+        
+        # Configure grid for 2x2 layout
+        preset_frame.columnconfigure(0, weight=1)
+        preset_frame.columnconfigure(1, weight=1)
+        
+        # Preset 1: Pure Selection
+        btn1 = ttk.Button(
+            preset_frame, 
+            text="🧬 Pure Selection\n(Textbook Evolution)",
+            command=self.apply_preset_1,
+            width=25
+        )
+        btn1.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        # Preset 2: Mutation-Selection Balance
+        btn2 = ttk.Button(
+            preset_frame,
+            text="⚖️ Mutation-Selection\n(Never Perfect)",
+            command=self.apply_preset_2,
+            width=25
+        )
+        btn2.grid(row=0, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        # Preset 3: Genetic Drift
+        btn3 = ttk.Button(
+            preset_frame,
+            text="🎲 Genetic Drift\n(Random Chance)",
+            command=self.apply_preset_3,
+            width=25
+        )
+        btn3.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        # Preset 4: Gene Flow
+        btn4 = ttk.Button(
+            preset_frame,
+            text="🌊 Gene Flow\n(Migration Effects)",
+            command=self.apply_preset_4,
+            width=25
+        )
+        btn4.grid(row=1, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        # Reset button (larger, below presets)
+        reset_btn = ttk.Button(
+            preset_frame,
+            text="🔄 Reset to Defaults",
+            command=self.apply_defaults,
+            width=52
+        )
+        reset_btn.grid(row=2, column=0, columnspan=2, padx=5, pady=10, sticky=(tk.W, tk.E))
+        
         # Bottom row: Model selector, View selector and buttons
-        bottom_row = ttk.Frame(control_frame)
+        bottom_row = ttk.Frame(self.control_frame)
         bottom_row.grid(row=6, column=0, columnspan=4, pady=15)
 
         # Model selector (NEW!)
@@ -526,6 +605,9 @@ class SimulatorGUI:
         if hasattr(self, 'speed_entry'):
             self.speed_entry.delete(0, tk.END)
             self.speed_entry.insert(0, f"{self.tick_ms}")
+    
+    def update_growth(self, val):
+        self.simulator.base_growth_rate = float(val)
     
     def update_from_entry(self, param_name):
         """Update parameter from entry box"""
@@ -740,10 +822,151 @@ class SimulatorGUI:
         self.figure.tight_layout()
         self.canvas.draw()
 
-def main():
+    def apply_preset_1(self):
+        """Preset 1: Pure Natural Selection"""
+        # Stop current simulation
+        self.running = False
+        
+        # Reset simulation
+        self.simulator.reset()
+        
+        # Set parameters
+        self.simulator.selection_strength = 0.6
+        self.simulator.mutation_rate = 0.05
+        self.simulator.genetic_drift_strength = 0.0
+        self.simulator.migration_rate = 0.0
+        self.simulator.model_type = "Ecological"
+        
+        # Update population parameters
+        self.simulator.base_growth_rate = 0.6
+        self.simulator.base_death_rate = 0.2
+        self.simulator.fitness_survival_bonus = 0.5
+        
+        # Update slider positions to reflect changes
+        self.selection_scale.set(0.6)
+        self.mutation_scale.set(0.05)
+        self.drift_scale.set(0.0)
+        self.migration_scale.set(0.0)
+        
+        # Update model dropdown if you have one
+        # self.model_var.set("Ecological")
+        
+        # Clear and redraw graphs
+        self.clear_plots()
+        self.update_plots()
+        
+        # Show message
+        print("✅ Applied Preset 1: Pure Natural Selection")
+        # Optional: add a status label to show which preset is active
+        
+    def apply_preset_2(self):
+        """Preset 2: Mutation-Selection Balance"""
+        self.running = False
+        self.simulator.reset()
+        
+        self.simulator.selection_strength = 0.5
+        self.simulator.mutation_rate = 0.3
+        self.simulator.genetic_drift_strength = 0.0
+        self.simulator.migration_rate = 0.0
+        self.simulator.model_type = "Ecological"
+        
+        self.simulator.base_growth_rate = 0.6
+        self.simulator.base_death_rate = 0.2
+        self.simulator.fitness_survival_bonus = 0.5
+        
+        self.selection_scale.set(0.5)
+        self.mutation_scale.set(0.3)
+        self.drift_scale.set(0.0)
+        self.migration_scale.set(0.0)
+        
+        self.clear_plots()
+        self.update_plots()
+        
+        print("✅ Applied Preset 2: Mutation-Selection Balance")
+
+    def apply_preset_3(self):
+        """Preset 3: Genetic Drift Dominates"""
+        self.running = False
+        self.simulator.reset()
+        
+        self.simulator.selection_strength = 0.4
+        self.simulator.mutation_rate = 0.1
+        self.simulator.genetic_drift_strength = 0.3
+        self.simulator.migration_rate = 0.0
+        self.simulator.model_type = "Ecological"
+        
+        self.simulator.base_growth_rate = 0.6
+        self.simulator.base_death_rate = 0.2
+        self.simulator.fitness_survival_bonus = 0.5
+        
+        self.selection_scale.set(0.4)
+        self.mutation_scale.set(0.1)
+        self.drift_scale.set(0.3)
+        self.migration_scale.set(0.0)
+        
+        self.clear_plots()
+        self.update_plots()
+        
+        print("✅ Applied Preset 3: Genetic Drift")
+
+    def apply_preset_4(self):
+        """Preset 4: Gene Flow Prevents Adaptation"""
+        self.running = False
+        self.simulator.reset()
+        
+        self.simulator.selection_strength = 0.6
+        self.simulator.mutation_rate = 0.1
+        self.simulator.genetic_drift_strength = 0.0
+        self.simulator.migration_rate = 0.2
+        self.simulator.model_type = "Ecological"
+        
+        self.simulator.base_growth_rate = 0.6
+        self.simulator.base_death_rate = 0.2
+        self.simulator.fitness_survival_bonus = 0.5
+        
+        self.selection_scale.set(0.6)
+        self.mutation_scale.set(0.1)
+        self.drift_scale.set(0.0)
+        self.migration_scale.set(0.2)
+        
+        self.clear_plots()
+        self.update_plots()
+        
+        print("✅ Applied Preset 4: Gene Flow")
+
+    def apply_defaults(self):
+        """Reset to default parameters"""
+        self.running = False
+        self.simulator.reset()
+        
+        # Default parameters (adjust to your original defaults)
+        self.simulator.selection_strength = 0.3
+        self.simulator.mutation_rate = 0.1
+        self.simulator.genetic_drift_strength = 0.0
+        self.simulator.migration_rate = 0.0
+        self.simulator.model_type = "Ecological"
+        
+        self.simulator.base_growth_rate = 0.6
+        self.simulator.base_death_rate = 0.2
+        self.simulator.fitness_survival_bonus = 0.35
+        
+        self.selection_scale.set(0.3)
+        self.mutation_scale.set(0.1)
+        self.drift_scale.set(0.0)
+        self.migration_scale.set(0.0)
+        
+        self.clear_plots()
+        self.update_plots()
+        
+        print("✅ Reset to default parameters")
+
+    def clear_plots(self):
+        """Clear all plot data"""
+        for ax in self.axes.flat:
+            ax.clear()
+        # Plots will be redrawn by update_plots()
+
+if __name__ == "__main__":
     root = tk.Tk()
     app = SimulatorGUI(root)
     root.mainloop()
-
-if __name__ == "__main__":
-    main()
