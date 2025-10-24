@@ -214,21 +214,26 @@ class EvolutionSimulator:
         """
         Genetic drift (for Ecological model only): bottleneck event.
         Note: In Wright-Fisher, drift is automatic from sampling variance.
-        """
-        drift_size = int(len(organisms) * (1 - self.genetic_drift_strength))
-        drift_size = max(10, drift_size)
         
-        if drift_size < len(organisms):
-            # Random sample (bottleneck event)
-            selected_indices = np.random.choice(len(organisms), drift_size, replace=False)
-            organisms = [organisms[i] for i in selected_indices]
+        FIXED: Bottleneck reduces population size - natural reproduction in next 
+        generation will restore it (creating sawtooth pattern).
+        """
+        # Bottleneck probability - BALANCED for visible but not overwhelming effect
+        # drift_strength = 0.6 → 40% chance per generation
+        bottleneck_probability = self.genetic_drift_strength * 0.67
+        
+        if np.random.random() < bottleneck_probability:
+            # Kill a fraction of the population randomly
+            survivors_fraction = 1 - self.genetic_drift_strength
+            drift_size = int(len(organisms) * survivors_fraction)
+            drift_size = max(50, drift_size)  # Minimum 50 survivors (was 10)
             
-            # Repopulate by cloning survivors
-            original_size = len(organisms)
-            target_size = int(original_size / (1 - self.genetic_drift_strength))
-            while len(organisms) < target_size:
-                parent = organisms[np.random.randint(len(organisms))]
-                organisms.append(Organism(traits=parent.traits.copy()))
+            if drift_size < len(organisms):
+                # Random sample (bottleneck event) - NO REPOPULATION!
+                selected_indices = np.random.choice(len(organisms), drift_size, replace=False)
+                organisms = [organisms[i] for i in selected_indices]
+                original_size = int(drift_size / survivors_fraction)
+                print(f"💀 BOTTLENECK! Population: {original_size} → {drift_size} survivors")
         
         return organisms
     
@@ -895,19 +900,23 @@ class SimulatorGUI:
         self.running = False
         self.simulator.reset()
         
-        self.simulator.selection_strength = 0.5
-        self.simulator.mutation_rate = 0.3
+        # FIXED: Much weaker selection + VERY high mutation for dramatic effect
+        self.simulator.selection_strength = 0.2  # Weak selection
+        self.simulator.mutation_rate = 0.7       # 70% mutate each generation
         self.simulator.genetic_drift_strength = 0.0
         self.simulator.migration_rate = 0.0
         self.simulator.model_type = "Ecological"
         
-        # Update population parameters - FIXED for survival
-        self.simulator.base_growth_rate = 1.0  # Further increased for survival
-        self.simulator.base_death_rate = 0.12  # Further reduced for survival
-        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
+        # Population dynamics - ADJUSTED to keep pop lower with low fitness
+        self.simulator.base_growth_rate = 0.9    # Reduced (was 1.2) - slower growth
+        self.simulator.base_death_rate = 0.15    # Increased (was 0.10) - more mortality
+        self.simulator.fitness_survival_bonus = 0.6  # Reduced (was 0.7) - fitness matters less
         
-        self.selection_scale.set(0.5)
-        self.mutation_scale.set(0.3)
+        # CRITICAL: MUCH bigger mutations for high variance
+        self.simulator.mutation_std = 1.5  # Large mutation effects
+        
+        self.selection_scale.set(0.2)
+        self.mutation_scale.set(0.7)
         self.drift_scale.set(0.0)
         self.migration_scale.set(0.0)
         
@@ -917,31 +926,32 @@ class SimulatorGUI:
         # Update status
         self.update_preset_status(
             "Mutation-Selection Balance",
-            "High mutation rate prevents population from reaching perfection. Shows mutation-selection equilibrium.",
+            "EXTREME mutation (70% rate, large effects) overwhelms weak selection. Variance stays very high!",
             "orange"
         )
         
-        print("✅ Applied Preset 2: Mutation-Selection Balance")
+        print("✅ Applied Preset 2: Mutation-Selection Balance - EXTREME VERSION!")
 
     def apply_preset_3(self):
         """Preset 3: Genetic Drift Dominates"""
         self.running = False
         self.simulator.reset()
         
-        self.simulator.selection_strength = 0.4
-        self.simulator.mutation_rate = 0.1
-        self.simulator.genetic_drift_strength = 0.3
+        # FIXED: Stronger drift, weaker selection for dramatic bottlenecks
+        self.simulator.selection_strength = 0.25  # Weak selection
+        self.simulator.mutation_rate = 0.15       # Moderate mutation
+        self.simulator.genetic_drift_strength = 0.6  # 60% kill rate per bottleneck!
         self.simulator.migration_rate = 0.0
         self.simulator.model_type = "Ecological"
         
-        # Update population parameters - FIXED for survival
-        self.simulator.base_growth_rate = 1.0  # Further increased for survival
-        self.simulator.base_death_rate = 0.12  # Further reduced for survival
-        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
+        # FIXED: Fast recovery for dramatic sawtooth pattern
+        self.simulator.base_growth_rate = 1.5    # Very fast growth for recovery
+        self.simulator.base_death_rate = 0.1     # Low baseline death rate
+        self.simulator.fitness_survival_bonus = 0.5  # Fitness matters less (drift dominates)
         
-        self.selection_scale.set(0.4)
-        self.mutation_scale.set(0.1)
-        self.drift_scale.set(0.3)
+        self.selection_scale.set(0.25)
+        self.mutation_scale.set(0.15)
+        self.drift_scale.set(0.6)
         self.migration_scale.set(0.0)
         
         self.clear_plots()
@@ -950,11 +960,11 @@ class SimulatorGUI:
         # Update status
         self.update_preset_status(
             "Genetic Drift",
-            "Random bottleneck events overpower selection. Fitness fluctuates randomly—evolution by chance!",
+            "Random bottlenecks kill 60% of population every few generations. Watch the sawtooth population crashes!",
             "red"
         )
         
-        print("✅ Applied Preset 3: Genetic Drift")
+        print("✅ Applied Preset 3: Genetic Drift - EXTREME bottlenecks!")
 
     def apply_preset_4(self):
         """Preset 4: Gene Flow Prevents Adaptation"""
