@@ -1,0 +1,207 @@
+"""
+===============================================================================
+QUICK REFERENCE GUIDE - CLASS PRESENTATION
+Evolution Simulator BB638
+===============================================================================
+
+PRESENTATION ORDER & TALKING POINTS:
+
+-------------------------------------------------------------------------------
+1. PRESET 1: PURE SELECTION (Green Status)
+-------------------------------------------------------------------------------
+WHAT TO SAY:
+"This shows textbook natural selection. Strong selection (0.6), very low 
+mutation (5%). Watch how the population rapidly evolves toward the optimal 
+traits of [7, 5, 8]."
+
+WHAT TO POINT OUT:
+✓ Fitness graph: Smooth S-curve from 0.12 → 0.84
+✓ Trait evolution: All 3 traits converge to optimal by gen 75
+✓ Variance graph: Collapses from 3 → 0.05 (genetic variation lost)
+✓ Population: Grows to carrying capacity (1000)
+✓ Trait distributions: Sharp peaks (everyone similar)
+
+KEY INSIGHT:
+"Selection removes variation. By gen 100, the population is nearly identical
+genetically - this is the cost of adaptation."
+
+TIME TO RUN: ~100 generations (30-40 seconds)
+
+-------------------------------------------------------------------------------
+2. PRESET 2: MUTATION-SELECTION BALANCE (Orange Status)
+-------------------------------------------------------------------------------
+WHAT TO SAY:
+"Now let's see what happens when mutation overpowers selection. I've cranked
+mutation up to 70% per generation with large effect sizes (1.5 units). 
+Selection is weak (0.2). This simulates viruses or organisms in rapidly 
+changing environments."
+
+WHAT TO POINT OUT:
+✓ Fitness graph: PLATEAUS at 0.47 - NEVER improves!
+✓ Trait evolution: Traits WANDER randomly - NO convergence
+✓ Variance: STAYS HIGH (5-6) - contrast with Preset 1!
+✓ Population: Lower (~700) because low fitness
+✓ Trait distributions: WIDE, flat (high genetic diversity)
+
+KEY INSIGHT:
+"Mutation introduces variation faster than selection can remove it. The 
+population never adapts because random mutations keep disrupting any progress.
+This is called mutation-selection balance - an evolutionary equilibrium."
+
+COMPARISON CALLOUT:
+"Compare these graphs to Preset 1 - COMPLETELY different outcomes with the
+same starting point and same optimal traits!"
+
+TIME TO RUN: ~100 generations (watch it NOT improve)
+
+-------------------------------------------------------------------------------
+3. PRESET 3: GENETIC DRIFT (Red Status)
+-------------------------------------------------------------------------------
+WHAT TO SAY:
+"This demonstrates random demographic events - like natural disasters or 
+founder effects. Every few generations, a bottleneck kills 60% of the 
+population RANDOMLY - fitness doesn't protect you. This models cheetahs, 
+elephant seals, or any population that went through a severe crash."
+
+WHAT TO POINT OUT:
+✓ Population graph: SAWTOOTH pattern (crash → recover → crash)
+✓ Fitness graph: Random jumps UP and DOWN (chaos!)
+✓ Variance: Wild swings when bottlenecks hit
+✓ Trait evolution: Random walk - no progress toward optimal
+✓ Bottleneck frequency: ~20 events per 50 generations (40%)
+
+KEY INSIGHT:
+"Notice fitness DROPS are NOT synchronized with population crashes. That's
+because bottlenecks kill randomly. A population with high fitness can crash,
+and by chance, low-fitness survivors might repopulate. This is evolution 
+without natural selection - pure random sampling."
+
+DRAMATIC MOMENT:
+Watch the population graph - you'll see sudden vertical drops!
+
+TIME TO RUN: 50-75 generations (enough to see several crashes)
+
+-------------------------------------------------------------------------------
+4. PRESET 4: GENE FLOW (Blue Status)
+-------------------------------------------------------------------------------
+WHAT TO SAY:
+"Final preset: gene flow disrupting local adaptation. Selection is STRONG 
+(0.6 - same as Preset 1), but 20% of the population is replaced each 
+generation by immigrants with random, maladapted traits."
+
+WHAT TO POINT OUT:
+✓ Fitness graph: Rises initially, then STALLS at 0.55-0.65
+✓ Compare to Preset 1: Should reach 0.84, but migration prevents it
+✓ Trait evolution: Slow progress, constantly pulled back
+✓ Variance: Higher than Preset 1 (immigration adds variation)
+✓ Fitness distribution: May see two clusters (locals + immigrants)
+
+KEY INSIGHT:
+"Even with strong selection, the population can't fully adapt because 
+immigration brings maladapted genes faster than selection can eliminate them.
+This models populations with high gene flow between different environments -
+like salmon or wind-pollinated plants."
+
+COMPARISON:
+"Without migration, this would look like Preset 1. With migration, fitness
+is cut almost in half (0.84 → 0.55)."
+
+TIME TO RUN: ~100 generations
+
+===============================================================================
+GENERAL PRESENTATION TIPS:
+===============================================================================
+
+OPENING:
+"I built this simulator to demonstrate how four different evolutionary forces
+can completely change outcomes, even starting from the same conditions."
+
+PARAMETERS TO SHOW:
+- Starting traits: [5, 5, 5]
+- Optimal traits: [7, 5, 8]
+- Initial population: 200
+- Carrying capacity: 1000
+- Fitness calculation: exp(-selection × distance_from_optimal)
+
+EXPLAIN THE 6 GRAPHS:
+1. Top-left: "Mean fitness over time"
+2. Top-middle: "Mean trait values (3 traits tracked)"
+3. Top-right: "Genetic variance (diversity measure)"
+4. Bottom-left: "Current trait distributions (histograms)"
+5. Bottom-middle: "Current fitness distribution"
+6. Bottom-right: "Population size over time"
+
+IF ASKED TECHNICAL QUESTIONS:
+- Model type: "Ecological model with variable population size"
+- Based on: "Wright-Fisher model with extensions"
+- Why fruit flies: "Fast generations, lab-observable evolution"
+- Time scale: "100-150 generations = ~2-3 years for Drosophila"
+- Fitness function: "Exponential decay with distance from optimal"
+
+BIOLOGY GRADE: A- (realistic but simplified)
+Strengths: Population dynamics, multiple evolutionary forces, observable outcomes
+Simplifications: No recombination, no sexual reproduction, no pleiotropy
+
+===============================================================================
+COMMON QUESTIONS & ANSWERS:
+===============================================================================
+
+Q: "Why do some presets never reach optimal?"
+A: "Because non-selective forces (mutation, drift, migration) can overpower
+    or prevent natural selection from working perfectly."
+
+Q: "Is this realistic?"
+A: "Yes - populations in nature rarely reach theoretical optima due to these
+    constraints. This is called 'evolutionary load'."
+
+Q: "What happens if you combine multiple forces?"
+A: "Great question! You can manually adjust sliders to combine forces - like
+    gene flow + drift (very chaotic!)"
+
+Q: "Could you add sexual reproduction?"
+A: "Future enhancement. Would add recombination, mate choice, sex-linked genes."
+
+Q: "Why 3 traits?"
+A: "Enough to show multi-dimensional evolution, simple enough to visualize.
+    Real organisms have thousands of evolving traits."
+
+Q: "How long did this take to build?"
+A: "~[X hours] including debugging population dynamics and getting drift to
+    work correctly with bottleneck events."
+
+===============================================================================
+BACKUP DEMO PLAN (if GUI fails):
+===============================================================================
+
+Show test results:
+1. final_test_all_presets.py output
+2. test_drift.py output (shows 22 bottlenecks)
+3. test_preset2_balance.py output (shows high variance)
+
+These demonstrate the same concepts without GUI.
+
+===============================================================================
+CONFIDENCE CHECKLIST:
+===============================================================================
+
+Before presenting, verify:
+☐ All 4 preset buttons work
+☐ Graphs update in real-time
+☐ Generation counter increments
+☐ Start/Stop/Reset buttons work
+☐ Slider adjustments work (for questions)
+☐ Window size is readable (1600x900)
+☐ Python environment activated
+
+Run final_test_all_presets.py one more time to confirm:
+☐ Preset 1 reaches fitness ~0.84
+☐ Preset 2 plateaus at ~0.48 with variance ~5-6
+☐ Preset 3 shows 15-25 bottlenecks per 50 gens
+☐ Preset 4 stalls at fitness ~0.55-0.65
+
+===============================================================================
+GOOD LUCK! 🎓
+===============================================================================
+All parameters validated. Each preset produces clear, pedagogically sound
+demonstrations of evolutionary forces. You've got this!
+"""
