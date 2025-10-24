@@ -84,9 +84,9 @@ class EvolutionSimulator:
         
         # Population dynamics parameters (for Ecological model)
         self.carrying_capacity = 1000
-        self.base_growth_rate = 0.6
-        self.base_death_rate = 0.2
-        self.fitness_survival_bonus = 0.6
+        self.base_growth_rate = 1.0  # Further increased for population survival
+        self.base_death_rate = 0.12  # Further reduced for population survival  
+        self.fitness_survival_bonus = 0.8  # Further increased for better survival
         
         # Model selection
         self.model_type = "Ecological"  # "Ecological" or "Wright-Fisher"
@@ -432,58 +432,56 @@ class SimulatorGUI:
         self.speed_entry.grid(row=5, column=col, padx=col_pad, pady=5)
         self.speed_entry.bind('<Return>', lambda e: self.update_from_entry('speed'))
         
-        # ==================== PRESET BUTTONS ====================
-        preset_frame = ttk.LabelFrame(self.control_frame, text="Quick Presets", padding="10")
-        preset_frame.grid(row=10, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=10, pady=15)
+        # ==================== PRESET DROPDOWN (Right side) ====================
+        # Create a new column on the right side for presets
+        preset_col = 4
+        ttk.Label(self.control_frame, text="Quick Presets:", font=('Arial', 20, 'bold')).grid(
+            row=0, column=preset_col, sticky=tk.W, padx=col_pad, pady=5)
         
-        # Configure grid for 2x2 layout
-        preset_frame.columnconfigure(0, weight=1)
-        preset_frame.columnconfigure(1, weight=1)
-        
-        # Preset 1: Pure Selection
-        btn1 = ttk.Button(
-            preset_frame, 
-            text="🧬 Pure Selection\n(Textbook Evolution)",
-            command=self.apply_preset_1,
-            width=25
+        self.preset_var = tk.StringVar(value="Select Preset...")
+        self.preset_selector = ttk.Combobox(
+            self.control_frame, 
+            width=25, 
+            state='readonly',
+            values=[
+                "Select Preset...",
+                "🧬 Pure Selection",
+                "⚖️ Mutation-Selection Balance",
+                "🎲 Genetic Drift",
+                "🌊 Gene Flow",
+                "🔄 Reset to Defaults"
+            ],
+            textvariable=self.preset_var, 
+            font=('Arial', 20)
         )
-        btn1.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        self.preset_selector.grid(row=1, column=preset_col, sticky=(tk.W, tk.E), padx=col_pad, pady=5)
+        self.preset_selector.bind('<<ComboboxSelected>>', self.apply_preset_from_dropdown)
         
-        # Preset 2: Mutation-Selection Balance
-        btn2 = ttk.Button(
-            preset_frame,
-            text="⚖️ Mutation-Selection\n(Never Perfect)",
-            command=self.apply_preset_2,
-            width=25
-        )
-        btn2.grid(row=0, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
+        # Apply button next to dropdown
+        ttk.Button(
+            self.control_frame, 
+            text="Apply Preset", 
+            command=lambda: self.apply_preset_from_dropdown(None)
+        ).grid(row=2, column=preset_col, padx=col_pad, pady=5)
         
-        # Preset 3: Genetic Drift
-        btn3 = ttk.Button(
-            preset_frame,
-            text="🎲 Genetic Drift\n(Random Chance)",
-            command=self.apply_preset_3,
-            width=25
+        # Active preset status label
+        self.active_preset_label = ttk.Label(
+            self.control_frame, 
+            text="Active: None", 
+            font=('Arial', 16, 'italic'),
+            foreground='gray'
         )
-        btn3.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        self.active_preset_label.grid(row=3, column=preset_col, padx=col_pad, pady=5)
         
-        # Preset 4: Gene Flow
-        btn4 = ttk.Button(
-            preset_frame,
-            text="🌊 Gene Flow\n(Migration Effects)",
-            command=self.apply_preset_4,
-            width=25
+        # Preset description label (shows what the preset does)
+        self.preset_desc_label = ttk.Label(
+            self.control_frame, 
+            text="", 
+            font=('Arial', 14),
+            foreground='darkblue',
+            wraplength=300
         )
-        btn4.grid(row=1, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
-        
-        # Reset button (larger, below presets)
-        reset_btn = ttk.Button(
-            preset_frame,
-            text="🔄 Reset to Defaults",
-            command=self.apply_defaults,
-            width=52
-        )
-        reset_btn.grid(row=2, column=0, columnspan=2, padx=5, pady=10, sticky=(tk.W, tk.E))
+        self.preset_desc_label.grid(row=4, column=preset_col, rowspan=2, padx=col_pad, pady=5, sticky=tk.W)
         
         # Bottom row: Model selector, View selector and buttons
         bottom_row = ttk.Frame(self.control_frame)
@@ -822,6 +820,36 @@ class SimulatorGUI:
         self.figure.tight_layout()
         self.canvas.draw()
 
+    def apply_preset_from_dropdown(self, event=None):
+        """Handle preset selection from dropdown"""
+        selected = self.preset_var.get()
+        
+        if selected == "Select Preset..." or selected == "":
+            return
+        
+        # Map dropdown selections to preset methods
+        if selected == "🧬 Pure Selection":
+            self.apply_preset_1()
+        elif selected == "⚖️ Mutation-Selection Balance":
+            self.apply_preset_2()
+        elif selected == "🎲 Genetic Drift":
+            self.apply_preset_3()
+        elif selected == "🌊 Gene Flow":
+            self.apply_preset_4()
+        elif selected == "🔄 Reset to Defaults":
+            self.apply_defaults()
+        
+        # Reset dropdown to default text
+        self.preset_var.set("Select Preset...")
+    
+    def update_preset_status(self, preset_name, description, color='green'):
+        """Update the active preset status label"""
+        self.active_preset_label.config(
+            text=f"Active: {preset_name}", 
+            foreground=color
+        )
+        self.preset_desc_label.config(text=description)
+
     def apply_preset_1(self):
         """Preset 1: Pure Natural Selection"""
         # Stop current simulation
@@ -837,10 +865,10 @@ class SimulatorGUI:
         self.simulator.migration_rate = 0.0
         self.simulator.model_type = "Ecological"
         
-        # Update population parameters
-        self.simulator.base_growth_rate = 0.6
-        self.simulator.base_death_rate = 0.2
-        self.simulator.fitness_survival_bonus = 0.5
+        # Update population parameters - FIXED for survival
+        self.simulator.base_growth_rate = 1.0  # Further increased for survival
+        self.simulator.base_death_rate = 0.12  # Further reduced for survival
+        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
         
         # Update slider positions to reflect changes
         self.selection_scale.set(0.6)
@@ -848,16 +876,19 @@ class SimulatorGUI:
         self.drift_scale.set(0.0)
         self.migration_scale.set(0.0)
         
-        # Update model dropdown if you have one
-        # self.model_var.set("Ecological")
-        
         # Clear and redraw graphs
         self.clear_plots()
         self.update_plots()
         
+        # Update status
+        self.update_preset_status(
+            "Pure Selection",
+            "Strong selection with low mutation. Shows textbook evolution toward optimal traits.",
+            "green"
+        )
+        
         # Show message
         print("✅ Applied Preset 1: Pure Natural Selection")
-        # Optional: add a status label to show which preset is active
         
     def apply_preset_2(self):
         """Preset 2: Mutation-Selection Balance"""
@@ -870,9 +901,10 @@ class SimulatorGUI:
         self.simulator.migration_rate = 0.0
         self.simulator.model_type = "Ecological"
         
-        self.simulator.base_growth_rate = 0.6
-        self.simulator.base_death_rate = 0.2
-        self.simulator.fitness_survival_bonus = 0.5
+        # Update population parameters - FIXED for survival
+        self.simulator.base_growth_rate = 1.0  # Further increased for survival
+        self.simulator.base_death_rate = 0.12  # Further reduced for survival
+        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
         
         self.selection_scale.set(0.5)
         self.mutation_scale.set(0.3)
@@ -881,6 +913,13 @@ class SimulatorGUI:
         
         self.clear_plots()
         self.update_plots()
+        
+        # Update status
+        self.update_preset_status(
+            "Mutation-Selection Balance",
+            "High mutation rate prevents population from reaching perfection. Shows mutation-selection equilibrium.",
+            "orange"
+        )
         
         print("✅ Applied Preset 2: Mutation-Selection Balance")
 
@@ -895,9 +934,10 @@ class SimulatorGUI:
         self.simulator.migration_rate = 0.0
         self.simulator.model_type = "Ecological"
         
-        self.simulator.base_growth_rate = 0.6
-        self.simulator.base_death_rate = 0.2
-        self.simulator.fitness_survival_bonus = 0.5
+        # Update population parameters - FIXED for survival
+        self.simulator.base_growth_rate = 1.0  # Further increased for survival
+        self.simulator.base_death_rate = 0.12  # Further reduced for survival
+        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
         
         self.selection_scale.set(0.4)
         self.mutation_scale.set(0.1)
@@ -906,6 +946,13 @@ class SimulatorGUI:
         
         self.clear_plots()
         self.update_plots()
+        
+        # Update status
+        self.update_preset_status(
+            "Genetic Drift",
+            "Random bottleneck events overpower selection. Fitness fluctuates randomly—evolution by chance!",
+            "red"
+        )
         
         print("✅ Applied Preset 3: Genetic Drift")
 
@@ -920,9 +967,10 @@ class SimulatorGUI:
         self.simulator.migration_rate = 0.2
         self.simulator.model_type = "Ecological"
         
-        self.simulator.base_growth_rate = 0.6
-        self.simulator.base_death_rate = 0.2
-        self.simulator.fitness_survival_bonus = 0.5
+        # Update population parameters - FIXED for survival
+        self.simulator.base_growth_rate = 1.0  # Further increased for survival
+        self.simulator.base_death_rate = 0.12  # Further reduced for survival
+        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
         
         self.selection_scale.set(0.6)
         self.mutation_scale.set(0.1)
@@ -932,6 +980,13 @@ class SimulatorGUI:
         self.clear_plots()
         self.update_plots()
         
+        # Update status
+        self.update_preset_status(
+            "Gene Flow",
+            "Constant migration introduces maladapted traits, preventing local adaptation despite strong selection.",
+            "purple"
+        )
+        
         print("✅ Applied Preset 4: Gene Flow")
 
     def apply_defaults(self):
@@ -939,16 +994,17 @@ class SimulatorGUI:
         self.running = False
         self.simulator.reset()
         
-        # Default parameters (adjust to your original defaults)
+        # Default parameters (adjusted for stable populations)
         self.simulator.selection_strength = 0.3
         self.simulator.mutation_rate = 0.1
         self.simulator.genetic_drift_strength = 0.0
         self.simulator.migration_rate = 0.0
         self.simulator.model_type = "Ecological"
         
-        self.simulator.base_growth_rate = 0.6
-        self.simulator.base_death_rate = 0.2
-        self.simulator.fitness_survival_bonus = 0.35
+        # Population parameters - matched to presets
+        self.simulator.base_growth_rate = 1.0  # Further increased for survival
+        self.simulator.base_death_rate = 0.12  # Further reduced for survival
+        self.simulator.fitness_survival_bonus = 0.8  # Further increased for survival
         
         self.selection_scale.set(0.3)
         self.mutation_scale.set(0.1)
@@ -957,6 +1013,13 @@ class SimulatorGUI:
         
         self.clear_plots()
         self.update_plots()
+        
+        # Update status
+        self.update_preset_status(
+            "Default",
+            "Moderate selection with low mutation. Neutral starting configuration.",
+            "gray"
+        )
         
         print("✅ Reset to default parameters")
 
